@@ -49,6 +49,7 @@ class VBSPManager(RANManager):
                          port=port)
 
         self.users = {}
+        self.vbses = self.devices
 
 
 def launch(context, service_id, port=DEFAULT_PORT):

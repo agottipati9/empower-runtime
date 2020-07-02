@@ -18,6 +18,10 @@
 """VBSP Connection."""
 
 import time
+import socket
+import sys
+import pickle
+import json
 
 from construct import Container
 from tornado.iostream import StreamClosedError
@@ -30,6 +34,7 @@ from empower.managers.ranmanager.ranconnection import RANConnection
 from empower_core.etheraddress import EtherAddress
 from empower.managers.ranmanager.vbsp import HELLO_SERVICE_PERIOD, \
     PT_HELLO_SERVICE_PERIOD
+import empower.managers.ranmanager.vbsp as vbsp
 
 
 class VBSPConnection(RANConnection):
@@ -184,6 +189,14 @@ class VBSPConnection(RANConnection):
                      callback=None):
         """Send message and set common parameters."""
 
+        # Add some code to check for specifc msg_type, crud and push info to validator but not to controller
+
+
+        demo = False
+        if crud_result is None:
+            crud_result = vbsp.OP_CREATE
+            demo = True
+
         parser = self.proto.PT_TYPES[action][0]
         name = self.proto.PT_TYPES[action][1]
 
@@ -215,21 +228,75 @@ class VBSPConnection(RANConnection):
             msg.length += tlv.length
 
         addr = self.stream.socket.getpeername()
-
         tmp = self.proto.decode_msg(msg_type, crud_result)
 
-        self.log.debug("Sending %s message (%s, %s) to %s seq %u",
-                       name, tmp[0], tmp[1], addr[0], msg.seq)
+        # Simple Web Server Code for Demo
+        received = ""
+        if demo:
+            HOST, PORT = "localhost", 9999
 
-        self.stream.write(parser.build(msg))
+            # Open Connection with Validator
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                # Connect to validator
+                sock.connect((HOST, PORT))
 
-        if callback:
-            self.xids[msg.xid] = (msg, callback)
+                # Push resource abstractions and control message to validator
+                self.log.info("Pushing resource abstractions....")
+                self.log.info("******Sending message (%s, %s) to be validated... SEQ %u",
+                    tmp[0], tmp[1], msg.seq)
+                res = self.get_resource_abstraction()
+                # v_msg = pickle.dumps(msg) + b'\n\n\n' + bytes(res, 'utf-8')
+                v_msg = pickle.dumps(msg) + b'\n\n\n' + res + b'\n\n\n' + self.get_slice_information()
+                sock.sendall(v_msg)
 
-        return msg.xid
+                # Receive decision from validator
+                received = str(sock.recv(1024), "utf-8")
+                sock.close()
+
+        if received == 'NO':
+            self.log.debug("Message (%s, %s) seq %u has been flagged as malicious and will be dropped.",
+                               tmp[0], tmp[1], msg.seq)
+            return -1
+        else:
+            # Create and send packet
+            packet = parser.build(msg)
+            self.log.debug("Sending %s message (%s, %s) to %s seq %u", name, tmp[0], tmp[1], addr[0], msg.seq)
+            self.stream.write(packet)
+            if callback:
+                self.xids[msg.xid] = (msg, callback)
+            return msg.xid
+
+    def get_slice_information(self):
+        """Aggregates all slice and project information and returns a byte encoding."""
+        # proj = self.projects
+        msg = b''
+        # for slice in self.slices:
+        #     msg += slice.to_str().encode('utf-8') + b'\n'
+
+        # for proj in self.projects:
+        #     msg += json.dumps(proj.to_dict()) + '\n'
+        return msg
+
+    def get_resource_abstraction(self):
+        """Aggregates all cell information and returns a pickle encoding."""
+        cells = self.device.cells
+        # msg = ''
+        msg = b''
+        for c in cells:
+            msg += pickle.dumps(cells[c].to_dict()) + b'\n'
+            # msg += cells[c].to_str() + '\n'
+        return msg
 
     def send_set_slice(self, project, slc, cell):
         """Send an SET_SLICE response message."""
+        self.projects.append(project)
+        self.slices.append(slc)
+
+        # make up own msg_type, service, and crud
+
+        # return self.send_message(action=self.proto.PT_CAPABILITIES_SERVICE,
+        #                          msg_type=self.proto.MSG_TYPE_REQUEST,
+        #                          crud_result=self.proto.OP_RETRIEVE)
 
     def send_caps_request(self):
         """Send a CAPS_REQUEST message."""
@@ -291,7 +358,6 @@ class VBSPConnection(RANConnection):
 
     def _handle_capabilities_service(self, msg):
         """Handle an incoming CAPABILITIES_SERVICE message."""
-
         # parse TLVs
         for tlv in msg.tlvs:
 

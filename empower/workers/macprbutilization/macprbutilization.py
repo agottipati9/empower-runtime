@@ -72,6 +72,10 @@ class MACPrbUtilization(ELTEWorker):
         self.dl_prb_counter = None
         self.ul_prb_counter = None
 
+        # Added Data Structures for MRC
+        self.prb = None
+        self.pci = None
+
         # Last seen time
         self.last = None
 
@@ -96,6 +100,10 @@ class MACPrbUtilization(ELTEWorker):
 
         out['dl_prb_counter'] = self.dl_prb_counter
         out['ul_prb_counter'] = self.ul_prb_counter
+
+        # Added for MRC
+        out['prb'] = self.prb
+        out['pci'] = self.pci
 
         return out
 
@@ -123,11 +131,17 @@ class MACPrbUtilization(ELTEWorker):
             self.dl_prb_counter = option.dl_prb_counter
             self.ul_prb_counter = option.ul_prb_counter
 
+            # Added for MRC
+            self.prb = option.prb
+            self.pci = option.pci
+
             cell = vbs.cells[option.pci]
 
+            # Updated for MRC
             cell.mac_prb_utilization = {
                 "dl_prb_counter": self.dl_prb_counter,
                 "ul_prb_counter": self.ul_prb_counter,
+                "prb": self.prb,
             }
 
         # handle callbacks

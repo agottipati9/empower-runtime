@@ -52,6 +52,11 @@ class RANConnection:
 
         self.xids = {}
 
+        # Added to expose to validator
+        self.projects = []
+        self.slices = []
+        self.slice_ids = set([])
+
         self.hb_worker = \
             tornado.ioloop.PeriodicCallback(self.heartbeat_cb, HB_PERIOD)
 
