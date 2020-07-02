@@ -190,8 +190,6 @@ class VBSPConnection(RANConnection):
         """Send message and set common parameters."""
 
         # Add some code to check for specifc msg_type, crud and push info to validator but not to controller
-
-
         demo = False
         if crud_result is None:
             crud_result = vbsp.OP_CREATE
@@ -246,12 +244,13 @@ class VBSPConnection(RANConnection):
                     tmp[0], tmp[1], msg.seq)
                 res = self.get_resource_abstraction()
                 # v_msg = pickle.dumps(msg) + b'\n\n\n' + bytes(res, 'utf-8')
-                v_msg = pickle.dumps(msg) + b'\n\n\n' + res + b'\n\n\n' + self.get_slice_information()
+                # v_msg = "CONTROL".encode('utf-8') + pickle.dumps(msg) + b'\n\n\n' + res + b'\n\n\n' + \
+                #         self.get_slice_information()
+                v_msg = "CONTROL".encode('utf-8') + b'\n\n\n' + pickle.dumps(msg) + b'\n\n\n' + res
                 sock.sendall(v_msg)
 
                 # Receive decision from validator
                 received = str(sock.recv(1024), "utf-8")
-                sock.close()
 
         if received == 'NO':
             self.log.debug("Message (%s, %s) seq %u has been flagged as malicious and will be dropped.",
@@ -266,16 +265,16 @@ class VBSPConnection(RANConnection):
                 self.xids[msg.xid] = (msg, callback)
             return msg.xid
 
-    def get_slice_information(self):
-        """Aggregates all slice and project information and returns a byte encoding."""
-        # proj = self.projects
-        msg = b''
-        # for slice in self.slices:
-        #     msg += slice.to_str().encode('utf-8') + b'\n'
-
-        # for proj in self.projects:
-        #     msg += json.dumps(proj.to_dict()) + '\n'
-        return msg
+    # def get_slice_information(self):
+    #     """Aggregates all slice and project information and returns a byte encoding."""
+    #     # proj = self.projects
+    #     msg = b''
+    #     # for slice in self.slices:
+    #     #     msg += slice.to_str().encode('utf-8') + b'\n'
+    #
+    #     for proj in self.projects:
+    #         msg += pickle.dumps(proj.to_dict()) + b'\n'
+    #     return msg
 
     def get_resource_abstraction(self):
         """Aggregates all cell information and returns a pickle encoding."""
@@ -289,8 +288,24 @@ class VBSPConnection(RANConnection):
 
     def send_set_slice(self, project, slc, cell):
         """Send an SET_SLICE response message."""
-        self.projects.append(project)
-        self.slices.append(slc)
+        # self.projects.append(project)
+        # self.slices.append(slc)
+
+        # Send Slice Information to Validator
+        msg = "SLICE".encode('utf-8') + b'\n\n\n' + slc.to_str().encode('utf-8') + b'\n\n\n' + \
+              pickle.dumps(project.to_dict())
+        HOST, PORT = "localhost", 9999
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Connect to validator
+        try:
+            sock.connect((HOST, PORT))
+            # Push resource abstractions and control message to validator
+            self.log.info("Pushing SLICE abstractions....")
+            sock.sendall(msg)
+        except:
+            self.log.error("Validator has not been started.")
+            raise ValueError("Validator has not been started.")
 
         # make up own msg_type, service, and crud
 
