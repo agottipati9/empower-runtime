@@ -36,7 +36,6 @@ from empower.managers.ranmanager.vbsp import HELLO_SERVICE_PERIOD, \
     PT_HELLO_SERVICE_PERIOD
 import empower.managers.ranmanager.vbsp as vbsp
 
-
 class VBSPConnection(RANConnection):
     """A persistent connection to a VBS."""
 
@@ -292,8 +291,11 @@ class VBSPConnection(RANConnection):
         # self.slices.append(slc)
 
         # Send Slice Information to Validator
-        msg = "SLICE".encode('utf-8') + b'\n\n\n' + slc.to_str().encode('utf-8') + b'\n\n\n' + \
-              pickle.dumps(project.to_dict())
+        # Project lte slices are None but Wifi has a slice??
+        # self.log.debug(project.to_dict())
+        # proj_slices = bytes(str(project.to_dict()['lte_slices']), 'utf-8')
+
+        msg = "SLICE".encode('utf-8') + b'\n\n\n' + slc.to_str().encode('utf-8') # + b'\n\n\n' + proj_slices
         HOST, PORT = "localhost", 9999
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -307,8 +309,7 @@ class VBSPConnection(RANConnection):
             self.log.error("Validator has not been started.")
             raise ValueError("Validator has not been started.")
 
-        # make up own msg_type, service, and crud
-
+        # make up own msg_type, service, and crud?
         # return self.send_message(action=self.proto.PT_CAPABILITIES_SERVICE,
         #                          msg_type=self.proto.MSG_TYPE_REQUEST,
         #                          crud_result=self.proto.OP_RETRIEVE)
