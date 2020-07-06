@@ -41,6 +41,7 @@ from empower.managers.projectsmanager.projectslvapshandler import \
     ProjectsLVAPsHandler
 from empower.managers.projectsmanager.projectsusershandler import \
     ProjectsUsersHandler
+from random import randint
 
 
 class EmpowerProjectsManager(ProjectsManager):
@@ -131,7 +132,7 @@ class EmpowerProjectsManager(ProjectsManager):
             project.save()
 
             project.upsert_wifi_slice(slice_id=0)
-            project.upsert_lte_slice(slice_id=0)
+            project.upsert_lte_slice(slice_id=randint(0, 100000))
 
         except ValueError as ex:
             self.remove(project.project_id)
