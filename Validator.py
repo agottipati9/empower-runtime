@@ -17,8 +17,6 @@ g_prb_util_dl = Gauge('prb_util_dl', 'progressive counter of DL PRBs scheduled s
 c_num_req = Counter('number_of_requests', 'Number of Control Requests')
 g_dl_freq = Gauge('dl_earfcn', 'Downlink Frequency')
 g_ul_freq = Gauge('ul_earfcn', 'Uplink Frequency')
-# g_rbgs = Gauge('rbgs_total', 'Radio block groups for slice') # can add labels this is for slices
-emp_slc_tools = {}
 
 # Empower Protocol Constants
 emp_crud_result = {"0": "UNDEFINED", "1": "UPDATE", "2": "CREATE", "3": "DELETE", "4": "RETRIEVE"}
@@ -30,6 +28,8 @@ emp_action_type = {"0": "HELLO_SERVICE", "1": "CAPABILITIES_SERVICE", "2": "UE_R
 emp_valid_met = {}
 emp_ctrl_met = {}
 emp_slice_met = {}
+thresholds = {}
+policy_type = ''
 
 # Addresses
 valid_addr = set([])
@@ -59,33 +59,17 @@ def add_to_dict(sample_list, type):
 
 def update_slice_stats(key, value):
     """Updates slice information."""
-    # """Creates prometheus monitoring tools and maps them to slice."""
-    # Need this to be dynamic...
-    # represents slice update
-    if key not in emp_slc_tools.keys():
-        # ip = key[0].replace('.', '_')
-        # met_name = 'rbgs_total'
-        # g_rbgs = Gauge(met_name, 'Radio block groups for slice', ['IP_' + ip, 'SLICE_' + key[1]])
+    # TODO: Need updates to be dynamic and pushed to Prometheus. Prom labels?
+    if key not in emp_slice_met.keys():
         met = {"rbgs": value}
         emp_slice_met = {key: met}
-        # g_rbgs.set(value)
-        # emp_slc_tools[key] = [g_rbgs]
     else:
-        # g_rbgs.set(value)
         emp_slice_met[key]['rbgs'] = value
-
-    print(emp_slice_met)
 
 
 def update_metrics(res):
     """Updates the Slice metrics in Prometheus"""
-    # Works for single cell...
-    # FOR LIST: 1 - MAC VBS, 3 - pci_val, 5 - dl_earfcn val, 7 - dl_earfcn_, val 9 - n_prb val
-    # res = res[0].split()
-    # g_prb.set(res[9])
-    # c_num_req.inc()
-    # g_dl_freq.set(res[5])
-    # g_ul_freq.set(res[7])
+    # TODO: Generalize metrics for multiple slices...
 
     # FOR DICT: addr, pci, dl_earfcn, ul_earfcn, n_prbs, mac_prb_utilization
     res = pickle.loads(res[0])
@@ -95,7 +79,7 @@ def update_metrics(res):
     g_dl_freq.set(res['dl_earfcn'])
     g_ul_freq.set(res['ul_earfcn'])
 
-    # Requires PRB_UTILIZATION worker
+    # Requires PRB_UTILIZATION service
     try:
         g_prb_util_dl.set(res['mac_prb_utilization']['dl_prb_counter'])
         g_prb_util_ul.set(res['mac_prb_utilization']['ul_prb_counter'])
@@ -103,7 +87,6 @@ def update_metrics(res):
         g_rbgs_available.set(calculate_rbgs(res['mac_prb_utilization']['prb']))
         # Can get physical cell id with res['mac_prb_utilization']['pci']
     except Exception as e:
-        # print(traceback.format_exc())
         print('No network state updates.')
 
 
@@ -127,11 +110,8 @@ def parse_empower_ctrl_msg(msg):
 
 def parse_empower_slice_msg(msg):
     """Parses an empower slice creation message and returns its components."""
-    # print(msg)
-
     # get slice information
     slice = msg[1].decode('utf-8').split()
-    # print(slice)
 
     # get resource abstractions (proj may not have any needed infos except id?)
     # proj = msg[1].decode('utf-8')
@@ -163,30 +143,63 @@ def is_valid_addr(addr):
     return addr in valid_addr
 
 
-def select_policy(addr, valid_met, ctrl_met, msg_type, result_type, action_type, type='None'):
+def select_policy(addr, valid_met, ctrl_met, msg_type, result_type, action_type):
     """Selects a policy based on the passed fields."""
-    # emp_crud_result {"0": "UNDEFINED", "1": "UPDATE", "2": "CREATE", "3": "DELETE", "4": "RETRIEVE"}
-    # emp_msg_type {"0": "REQUEST", "1": "RESPONSE"}
-    # emp_action_type {"0": "HELLO_SERVICE", "1": "CAPABILITIES_SERVICE", "2": "UE_REPORTS_SERVICE",
-    #                    "3": "UE_MEASUREMENTS_SERVICE", "4": "MAC_PRB_UTILIZATION", "5": "HANDOVER"}
-    if type == 'None':
+    if policy_type == 'None':
         return 'YES'
-    if type == 'Demo':
+    elif policy_type == 'Demo':
         return demo_policy()
-    if msg_type == 'RESPONSE':
-        # Allow application responses to RAN to flow through
-        return 'YES'
-    if result_type == "UNDEFINED":
-        # Drop Packet with an undefined crud result
-        return 'NO'
     else:
+        # Allow application responses to RAN to flow through
+        if msg_type == 'RESPONSE':
+            return 'YES'
+        # Drop Packet with an undefined crud result
+        if result_type == "UNDEFINED":
+            return 'NO'
         # Based on action type check for expected network stats e.g thresholds and stuff?
-        slices, res_info = get_slices(addr)
-        pass
+        return net_state_policy(addr, valid_met, ctrl_met, action_type)
+
+
+def net_state_policy(addr, action_type, valid_met, ctrl_met):
+    """Checks for the expected network state based on threshold values and action type."""
+    """
+    Config Thresholds
+    min_rbgs
+    max_rbgs
+    tcp_in_out
+    sockstat_tcp
+    sockstat_mem
+    tcp_direct_trans
+    net_traffic
+    """
+
+    # TODO: vary policy based on action_type?
+
+    slices, res_info = get_slices(addr)
+    print('Validator Metrics:', valid_met)
+    print('Controller Metrics: ', ctrl_met)
+
+    # Ensure resources are within thresholds
+    for r in res_info:
+        if r < thresholds['min_rbgs'] or r > thresholds['max_rbgs']:
+            return 'NO'
+
+    # Ensure controller network state is within thresholds
+    if invalid_net_state(ctrl_met):
+        return 'NO'
+
+    return 'YES'
+
+
+def invalid_net_state(ctrl_met):
+    """Checks for valid network state. Returns true if net state is out of bounds, and false otherwise."""
+    return ctrl_met['tcp_in_out'] > thresholds['tcp_in_out'] or ctrl_met['sockstat_mem'] > thresholds['sockstat_mem'] \
+            or ctrl_met['sockstat_tcp'] > thresholds['sockstat_tcp'] or ctrl_met['tcp_direct_trans'] > \
+            thresholds['tcp_direct_trans'] or ctrl_met['net_traffic'] > thresholds['net_traffic']
 
 
 def get_slices(addr=None):
-    """Returns slice keys (addr, slice_id) and info associated with the passed address. Returns all info no address."""
+    """Returns slice keys and the info associated with the passed address. Returns all info no address passed."""
     slices = []
     rbgs = []
     for key in emp_slice_met.keys():
@@ -215,14 +228,12 @@ class TCPHandler(socketserver.BaseRequestHandler):
         if not is_valid_addr(self.client_address[0]):
             self.send_rejection('Received Packet from Unknown IP address: {}'.format(self.client_address[0]))
             return
-        # if not self.validate_addr():
-        #     return
 
         # Parse Control Message
         self.data = self.request.recv(2048).strip()
         msg_ = self.data.split(b'\n\n\n')
 
-        # Add error handling
+        # Handle only valid packets and respond based on protocol
         try:
             if msg_[0].decode('utf-8') == 'SLICE':
                 slice = parse_empower_slice_msg(msg_)
@@ -241,34 +252,8 @@ class TCPHandler(socketserver.BaseRequestHandler):
             print(traceback.format_exc())
             self.send_rejection('Received Malicious Control Packet.')
 
-        # self.data = b''
-        # for i in range(100):
-        #     if b'\r\n\r\n' not in self.data:
-        #         self.data += self.request.recv(4096).strip()
-        #     else:
-        #         break
-
-        # try:
-        #     control, resources = parse_empower_msg(self.data)
-        # except:
-        #     self.send_rejection('Received Malformed Control Packet.')
-        #     return
-
-        # Send Response to Client
-        # self.request is the TCP socket connected to the client
-
     def handle_slice_creation(self, slice):
         """Handles a slice creation message."""
-        #TODO: If slice and project already exist assume its an update or something...
-        '''
-        0 - LTE tag
-        1 - slice id
-        2 - slice id value
-        3 - rbgs
-        4 - rgbs value
-        5 - ue scheduler
-        6 - ue scheduler type
-        '''
         slice_id = slice[2] # Maybe should use project id instead??
         rgbs = slice[4]
         key = (self.client_address[0], slice_id)
@@ -303,7 +288,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         parse_metrics(c_metrics, 'c')
 
         # Make Decision
-        resp = select_policy(self.client_address[0], v_metrics, c_metrics, msg_type, result_type, action_type)
+        resp = select_policy(self.client_address[0], emp_valid_met, emp_ctrl_met, msg_type, result_type, action_type)
 
         # Update Metrics
         if resp == 'YES':
@@ -312,44 +297,25 @@ class TCPHandler(socketserver.BaseRequestHandler):
         return resp
 
     def send_rejection(self, msg):
+        """Sends a rejection to the controller and prints the msg via stdout."""
         print(msg)
         self.request.sendall(bytes('NO', "utf-8"))
         print("Packet has been dropped.")
 
-    # def validate_addr(self):
-    #     """Validates the client address. If new address, then adds or rejects an address based on the protocol."""
-    #     if not is_valid_addr(self.client_address[0]):
-    #         # Check whether handshake protocol
-    #         try:
-    #             self.data = self.request.recv(1024).strip().decode('utf-8')
-    #         except:
-    #             print('Received Packet from Unknown IP address.')
-    #             self.request.sendall(bytes('NO', "utf-8"))
-    #             print("Packet has been dropped.")
-    #             return False
-    #
-    #         # Respond based on protocol
-    #         if self.data == "HELLO":
-    #             print('Connection has been established with IP:{} Port:{}'.format(self.client_address[0],
-    #                                                                               self.client_address[1]))
-    #             valid_addr.add(self.client_address[0])
-    #             self.request.sendall(bytes('OK', 'utf-8'))
-    #             return True
-    #         else:
-    #             print('Received Packet from Unknown IP address.')
-    #             self.request.sendall(bytes('NO', "utf-8"))
-    #             print("Packet has been dropped.")
-    #             return False
-    #
-    #     return True
-
 
 if __name__ == "__main__":
-    # Parse Config IP Addresses
+    # Parse IP Addresses Config
     config = configparser.ConfigParser()
     config.read('config.ini')
     for key in config['Address']:
         valid_addr.add(config['Address'][key])
+
+    # Parse Resource Thresholds Config
+    for key in config['Threshold']:
+        thresholds[key] = float(config['Threshold'][key])
+
+    # Parse Policy Type
+    policy_type = config['Policy']['type']
 
     # Start HTTP server to log info to Prometheus
     start_http_server(7999)
@@ -359,6 +325,5 @@ if __name__ == "__main__":
     print("Running Validator. Listening on port 9999.")
     HOST, PORT = "localhost", 9999
     with socketserver.TCPServer((HOST, PORT), TCPHandler) as server:
-        # Activate the server; this will keep running until you
         # interrupt the program with Ctrl-C
         server.serve_forever()
