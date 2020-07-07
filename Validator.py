@@ -4,6 +4,7 @@ import json
 import socketserver
 import configparser
 import traceback
+import threading
 from prometheus_client import start_http_server, Summary, Gauge, Counter
 from prometheus_client.parser import text_string_to_metric_families
 
@@ -180,6 +181,12 @@ def net_state_policy(addr, action_type, valid_met, ctrl_met):
     print('Validator Metrics:', valid_met)
     print('Controller Metrics: ', ctrl_met)
 
+    # Verify that no alerts are firing
+    # https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/#inspecting-alerts-during-runtime
+    # if ctrl_met['alertname'] == 1:
+    #     print('Resource anomalies have been detected.')
+    #     return 'NO'
+
     # Ensure resources are within thresholds
     for r in res_info:
         if r < thresholds['min_rbgs'] or r > thresholds['max_rbgs']:
@@ -224,6 +231,9 @@ def demo_policy():
 
 class TCPHandler(socketserver.BaseRequestHandler):
     """Handles Incoming TCP Connections and Messages"""
+
+    # https://docs.python.org/2/library/socketserver.html
+    # BaseRequest vs StreamRequest?? StreamRequest seems to be safer...
 
     def handle(self):
         """Validates the incoming control msg and relays decision back to client."""
@@ -327,6 +337,6 @@ if __name__ == "__main__":
     # Create the server for application communication
     print("Running Validator. Listening on port 9999.")
     HOST, PORT = "localhost", 9999
-    with socketserver.TCPServer((HOST, PORT), TCPHandler) as server:
+    with socketserver.ThreadingTCPServer((HOST, PORT), TCPHandler) as server:
         # interrupt the program with Ctrl-C
         server.serve_forever()
