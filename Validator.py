@@ -155,6 +155,7 @@ def select_policy(addr, valid_met, ctrl_met, msg_type, result_type, action_type)
             return 'YES'
         # Drop Packet with an undefined crud result
         if result_type == "UNDEFINED":
+            print('Undefined crud result received.')
             return 'NO'
         # Based on action type check for expected network stats e.g thresholds and stuff?
         return net_state_policy(addr, valid_met, ctrl_met, action_type)
@@ -182,10 +183,12 @@ def net_state_policy(addr, action_type, valid_met, ctrl_met):
     # Ensure resources are within thresholds
     for r in res_info:
         if r < thresholds['min_rbgs'] or r > thresholds['max_rbgs']:
+            print('Network slices exceed resource block group threshold bounds.')
             return 'NO'
 
     # Ensure controller network state is within thresholds
     if invalid_net_state(ctrl_met):
+        print('Network is in an invalid state and may be under attack.')
         return 'NO'
 
     return 'YES'
