@@ -8,16 +8,27 @@ import threading
 from prometheus_client import start_http_server, Summary, Gauge, Counter
 from prometheus_client.parser import text_string_to_metric_families
 
+""" LABELS: 
+    Implementation:
+        - If exist, update current prom stats with corresponding label
+        - If not, update backend view, insert new labels, update metrics 
+        - Utilize two separate update methods (group 1 and group 2) or use flags to differentiate
+"""
+
 # Prometheus Monitoring Tools
-g_prb_total = Gauge('n_prb_total', 'total number of physical resource blocks')
-g_rbgs_total = Gauge('rbgs_total', 'Radio block groups for a slice') # can add labels
-g_prb_available = Gauge('n_prb_open', 'number of available physical resource blocks')
-g_rbgs_available = Gauge('n_rbgs_open', 'number of available resource block groups')
-g_prb_util_ul = Gauge('prb_util_ul', 'progressive counter of UL PRBs scheduled so far')
-g_prb_util_dl = Gauge('prb_util_dl', 'progressive counter of DL PRBs scheduled so far')
-c_num_req = Counter('number_of_requests', 'Number of Control Requests')
-g_dl_freq = Gauge('dl_earfcn', 'Downlink Frequency')
-g_ul_freq = Gauge('ul_earfcn', 'Uplink Frequency')
+# Resources within an instance:
+g_prb_total = Gauge('n_prb_total', 'total number of physical resource blocks for an instance', ['ip', 'mac'])
+g_rbgs_total = Gauge('rbgs_total', 'total number of Radio block groups for an instance', ['ip', 'mac'])
+g_slice_rbgs = Gauge('n_rbgs_alloc', 'number of allocated resource block groups for a slice', ['ip', 'sliceId'])
+
+# Resources by Instance:
+g_prb_available = Gauge('n_prb_open', 'number of available physical resource blocks for an instance', ['ip'])
+g_rbgs_available = Gauge('n_rbgs_open', 'number of available resource block groups for an instance', ['ip'])
+g_prb_util_ul = Gauge('prb_util_ul', 'progressive counter of UL PRBs scheduled so far in an instance', ['ip'])
+g_prb_util_dl = Gauge('prb_util_dl', 'progressive counter of DL PRBs scheduled so far in an instance', ['ip'])
+c_num_req = Counter('number_of_requests', 'Number of Control Requests for an instance', ['ip'])
+g_dl_freq = Gauge('dl_earfcn', 'Downlink Frequency for an instance', ['ip'])
+g_ul_freq = Gauge('ul_earfcn', 'Uplink Frequency for an instance', ['ip'])
 
 # Empower Protocol Constants
 emp_crud_result = {"0": "UNDEFINED", "1": "UPDATE", "2": "CREATE", "3": "DELETE", "4": "RETRIEVE"}
@@ -33,8 +44,10 @@ thresholds = {}
 policy_type = ''
 
 # Addresses
-valid_addr = set([])
-# emp_control_vbs = {"": set([])}  # keep track of enbs registered to a controller (ip)?
+valid_addr = set([])  # Authorized addresses
+emp_control_vbs = {}  # {"": set([])} IP to VBS macs
+emp_control_slices = {}  # {"": set([])} IP to Slice IDs
+emp_control_addrs = set([])  # IPs in use
 
 
 def parse_metrics(metrics, type):
@@ -70,7 +83,30 @@ def update_slice_stats(key, value):
 
 def update_metrics(res):
     """Updates the Slice metrics in Prometheus"""
-    # TODO: Generalize metrics for multiple slices...
+    # TODO: Generalize metrics for multiple slices and eNBs...
+    """ LABELS: 
+            Group 1: This differentiate metrics based on instance and breakdown of resources within instances...
+                - MULTIPLE eNBs: eNB MAC with ip addr for total resources (n_prb, rbgs)
+                    - ip addr to accomodate multiple instances
+                    - eNB addr to accomodate multiple eNBs on an instance 
+                        - n/a mac will represent entire instance...
+                - Total Number of Requests, DL Freq, UL Freq, and UTILs: differentiated with ip addr
+                    - ip addr to accomodate different instances
+            
+            Group 2: This will fine grain breakdown of resources within instances
+            - Multiple Slices: ip addr and slice id for individual resources (rbgs)
+                - ip addr to accomodate multiple instances
+                - slice id to accomodate multiple slices within an instance
+                
+        Implementation:
+            - Need local structures to query whether (address, slice id), (address, eNB mac), or address exist
+                - emp_control_vbs: IP to VBS macs (key to set)
+                - emp_control_slices: IP to Slice IDs (key to set)
+                - emp_control_addrs: IPs in use (set)
+            - If exist, update current prom stats with corresponding label
+            - If not, update backend view, insert new labels, update metrics 
+            - Utilize two separate update methods (group 1 and group 2) or use flags to differentiate
+    """
 
     # FOR DICT: addr, pci, dl_earfcn, ul_earfcn, n_prbs, mac_prb_utilization
     res = pickle.loads(res[0])
@@ -204,8 +240,8 @@ def net_state_policy(addr, action_type, valid_met, ctrl_met):
 def invalid_net_state(ctrl_met):
     """Checks for valid network state. Returns true if net state is out of bounds, and false otherwise."""
     return ctrl_met['tcp_in_out'] > thresholds['tcp_in_out'] or ctrl_met['sockstat_mem'] > thresholds['sockstat_mem'] \
-            or ctrl_met['sockstat_tcp'] > thresholds['sockstat_tcp'] or ctrl_met['tcp_direct_trans'] > \
-            thresholds['tcp_direct_trans'] or ctrl_met['net_traffic'] > thresholds['net_traffic']
+           or ctrl_met['sockstat_tcp'] > thresholds['sockstat_tcp'] or ctrl_met['tcp_direct_trans'] > \
+           thresholds['tcp_direct_trans'] or ctrl_met['net_traffic'] > thresholds['net_traffic']
 
 
 def get_slices(addr=None):
@@ -267,7 +303,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def handle_slice_creation(self, slice):
         """Handles a slice creation message."""
-        slice_id = slice[2] # Maybe should use project id instead??
+        slice_id = slice[2]  # Maybe should use project id instead??
         rgbs = slice[4]
         key = (self.client_address[0], slice_id)
         update_slice_stats(key, rgbs)
