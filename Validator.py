@@ -57,11 +57,11 @@ def add_to_dict(sample_list, type):
     val = sample_list[2]
 
     if type == 'v':
-        emp_valid_met[key] = val
-        # emp_valid_met[key] = {"value": val, "labels": labels}
+        # emp_valid_met[key] = val
+        emp_valid_met[key] = {"value": val, "labels": labels}
     elif type == 'c':
-        emp_ctrl_met[key] = val
-        # emp_ctrl_met[key] = {"value": val, "labels": labels}
+        # emp_ctrl_met[key] = val
+        emp_ctrl_met[key] = {"value": val, "labels": labels}
     else:
         print('Error. Invalid Metric Type.')
 
@@ -238,13 +238,13 @@ def net_state_policy(addr, valid_met, ctrl_met, action_type):
 
     # TODO: vary policy based on action_type?
     # TODO: Update to filter based on labels for certain metrics
-    # TODO: Query alerts correctly. How to differentiate between instances?
+    # TODO: How to query alerts correctly. How to differentiate between instances?
 
     slices, res_info = get_slices(addr)
 
     # Verify that no alerts are firing
     # https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/#inspecting-alerts-during-runtime
-    # if ctrl_met['alertname'] == 1:
+    # if ctrl_met['RapidControlReq'] == 1:
     #     print('Resource anomalies have been detected.')
     #     return 'NO'
 
@@ -265,11 +265,11 @@ def net_state_policy(addr, valid_met, ctrl_met, action_type):
 def invalid_net_state(ctrl_met):
     """Checks for valid network state. Returns true if net state is out of bounds, and false otherwise."""
     # TODO: Update to filter based on labels for certain metrics
-    return ctrl_met['node_netstat_Tcp_OutSegs'] / 100000 > thresholds['tcp_in_out'] \
-        or ctrl_met['node_sockstat_TCP_mem_bytes'] / 100000 > thresholds['sockstat_mem'] \
-        or ctrl_met['node_sockstat_TCP_tw'] > thresholds['sockstat_tcp'] \
-        or ctrl_met['node_netstat_Tcp_PassiveOpens'] / 1000 > thresholds['tcp_direct_trans'] \
-        or ctrl_met['node_network_receive_bytes_total'] / 10000 > thresholds['net_traffic']
+    return ctrl_met['node_netstat_Tcp_OutSegs']['value'] / 100000 > thresholds['tcp_in_out'] \
+        or ctrl_met['node_sockstat_TCP_mem_bytes']['value'] / 100000 > thresholds['sockstat_mem'] \
+        or ctrl_met['node_sockstat_TCP_tw']['value'] > thresholds['sockstat_tcp'] \
+        or ctrl_met['node_netstat_Tcp_PassiveOpens']['value'] / 1000 > thresholds['tcp_direct_trans'] \
+        or ctrl_met['node_network_receive_bytes_total']['value'] / 10000 > thresholds['net_traffic']
 
 
 def get_slices(addr=None):
@@ -285,7 +285,7 @@ def get_slices(addr=None):
 
 def demo_policy():
     """Caps controller requests at 20 for an entire session."""
-    num_req = emp_valid_met['number_of_requests_total']
+    num_req = emp_valid_met['number_of_requests_total']['value']
     if num_req < 20:
         resp = 'YES'
     else:
