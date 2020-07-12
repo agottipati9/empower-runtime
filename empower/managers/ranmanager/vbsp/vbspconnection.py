@@ -305,7 +305,9 @@ class VBSPConnection(RANConnection):
             # Push resource abstractions and control message to validator
             self.log.info("Pushing SLICE abstractions....")
             sock.sendall(msg)
+            sock.close()
         except:
+            sock.close()
             self.log.error("Validator has not been started.")
             raise ValueError("Validator has not been started.")
 
@@ -313,6 +315,23 @@ class VBSPConnection(RANConnection):
         # return self.send_message(action=self.proto.PT_CAPABILITIES_SERVICE,
         #                          msg_type=self.proto.MSG_TYPE_REQUEST,
         #                          crud_result=self.proto.OP_RETRIEVE)
+
+    def send_del_slice(self, project, slc, cell):
+        """Send a DEL_SLICE message."""
+        msg = "DEL_SLICE".encode('utf-8') + b'\n\n\n' + slc.slice_id
+        HOST, PORT = "localhost", 9999
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Connect to validator
+        try:
+            sock.connect((HOST, PORT))
+            self.log.info("Sending slice deletion update...")
+            sock.sendall(msg)
+            sock.close()
+        except:
+            sock.close()
+            self.log.error("Validator has not been started.")
+            raise ValueError("Validator has not been started.")
 
     def send_caps_request(self):
         """Send a CAPS_REQUEST message."""

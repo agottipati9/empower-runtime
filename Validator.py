@@ -66,7 +66,7 @@ def add_to_dict(sample_list, type):
         print('Error. Invalid Metric Type.')
 
 
-def update_slice_stats(addr, slc_id, value):
+def update_slice_stats(addr, slc_id, value, rem=False):
     """Updates slice information both locally and via prometheus."""
 
     """
@@ -82,13 +82,22 @@ def update_slice_stats(addr, slc_id, value):
             - If not, update backend view, insert new labels, update metrics 
     """
 
+    # TODO: Update backend upon slice deletion
+    # Gaurd for removing slice info
+    if rem:
+        return
+
     # Update local view of slices
     if addr not in emp_control_slices:
         emp_control_slices[addr] = set([slc_id])
-        emp_local_slice_met[(addr, slc_id)] = {'rbgs': value}
     else:
         emp_control_slices[addr].add(slc_id)
+
+    # Update local view of slice resources
+    if (addr, slc_id) in emp_local_slice_met.keys():
         emp_local_slice_met[(addr, slc_id)]['rbgs'] = value
+    else:
+        emp_local_slice_met[(addr, slc_id)] = {'rbgs': value}
 
     # Update Prometheus
     g_slice_rbgs.labels(addr, slc_id).set(value)
@@ -214,7 +223,7 @@ def select_policy(addr, valid_met, ctrl_met, msg_type, result_type, action_type)
         return net_state_policy(addr, valid_met, ctrl_met, action_type)
 
 
-def net_state_policy(addr, action_type, valid_met, ctrl_met):
+def net_state_policy(addr, valid_met, ctrl_met, action_type):
     """Checks for the expected network state based on threshold values and action type."""
     """
     Config Thresholds
@@ -232,8 +241,6 @@ def net_state_policy(addr, action_type, valid_met, ctrl_met):
     # TODO: Query alerts correctly. How to differentiate between instances?
 
     slices, res_info = get_slices(addr)
-    print('Validator Metrics:', valid_met)
-    print('Controller Metrics: ', ctrl_met)
 
     # Verify that no alerts are firing
     # https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/#inspecting-alerts-during-runtime
@@ -258,20 +265,21 @@ def net_state_policy(addr, action_type, valid_met, ctrl_met):
 def invalid_net_state(ctrl_met):
     """Checks for valid network state. Returns true if net state is out of bounds, and false otherwise."""
     # TODO: Update to filter based on labels for certain metrics
-
-    return ctrl_met['tcp_in_out'] > thresholds['tcp_in_out'] or ctrl_met['sockstat_mem'] > thresholds['sockstat_mem'] \
-           or ctrl_met['sockstat_tcp'] > thresholds['sockstat_tcp'] or ctrl_met['tcp_direct_trans'] > \
-           thresholds['tcp_direct_trans'] or ctrl_met['net_traffic'] > thresholds['net_traffic']
+    return ctrl_met['node_netstat_Tcp_OutSegs'] / 100000 > thresholds['tcp_in_out'] \
+        or ctrl_met['node_sockstat_TCP_mem_bytes'] / 100000 > thresholds['sockstat_mem'] \
+        or ctrl_met['node_sockstat_TCP_tw'] > thresholds['sockstat_tcp'] \
+        or ctrl_met['node_netstat_Tcp_PassiveOpens'] / 1000 > thresholds['tcp_direct_trans'] \
+        or ctrl_met['node_network_receive_bytes_total'] / 10000 > thresholds['net_traffic']
 
 
 def get_slices(addr=None):
     """Returns slice keys and the info associated with the passed address. Returns all info no address passed."""
     slices = []
     rbgs = []
-    for key in emp_slice_met.keys():
+    for key in emp_local_slice_met.keys():
         if addr is None or addr == key[0]:
             slices.append(key)
-            rbgs.append(emp_slice_met[key]['rbgs'])
+            rbgs.append(float(emp_local_slice_met[key]['rbgs']))
     return slices, rbgs
 
 
@@ -309,6 +317,10 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 self.handle_slice_creation(slice)
                 # emp_addrs.add(self.client_address[0])
                 print('Slice Information has been updated.')
+            elif msg_[0].decode('utf-8') == 'DEL_SLICE':
+                slice_id = msg_[1]
+                self.handle_slice_deletion(slice_id)
+                print('Slice Information has been updated.')
             elif msg_[0].decode('utf-8') == 'CONTROL':
                 control, resources = parse_empower_ctrl_msg(msg_)
                 resp = self.handle_control_msg(control, resources)
@@ -328,6 +340,10 @@ class TCPHandler(socketserver.BaseRequestHandler):
         slice_id = slice[2]  # Maybe should use project id instead??
         rgbs = slice[4]
         update_slice_stats(self.client_address[0], slice_id, rgbs)
+
+    def handle_slice_deletion(self, slice_id):
+        """Handles a slice deletion message."""
+        update_slice_stats(self.client_address[0], slice_id, 0, rem=True)
 
     def handle_control_msg(self, control, resources):
         """Handles control messages."""
