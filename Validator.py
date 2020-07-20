@@ -315,17 +315,70 @@ class TCPHandler(socketserver.BaseRequestHandler):
         # Handle only valid packets and respond based on protocol
         try:
             # Testing for Admin Application
-            if msg_[0].decode('utf-8') == 'test':
-                print('Received Command from Admin application.')
-                self.request.sendall(bytes('ok', 'utf-8'))
-                print('Sent response.')
-                return
+            if msg_[0].decode('utf-8') == 'ADMIN':
+                if msg_[1].decode('utf-8') == 'test':
+                    print('Received {} Command from Admin application.'.format(msg_[0]))
+                    self.request.sendall(bytes('ok', 'utf-8'))
+                    print('Sent response.')
+                    return
+                elif msg_[1].decode('utf-8') == 'get-all':
+                    print('Received {} Command from Admin application.'.format(msg_[0]))
+
+                    # TODO: Will need to loop through all active instances
+                    r = requests.get('http://localhost:8888/api/v1/projects/')
+                    resp = json.loads(r.text)
+                    resp = pickle.dumps(resp)
+                    self.request.sendall(resp)
+                    print('Sent response.')
+                    return
+                elif msg_[1].decode('utf-8').split()[0] == 'start':
+                    arr = msg_[1].decode('utf-8').split()
+                    cmd = arr[0]
+                    proj = arr[1]
+                    app = arr[2]
+                    data = {}
+                    print('Received {} Command from Admin application.'.format(cmd))
+
+                    if app == 'ue-measurements':
+                        data = {'version': '1.0',
+                                'name': 'empower.apps.uemeasurements.uemeasurements',
+                                'params':{
+                                    'every': 5000
+                                }}
+
+                    # TODO: Will need to loop through all active instances
+                    url = 'http://localhost:8888/api/v1/projects/{}/apps'.format(proj)
+                    r = requests.post(url, data=data)
+                    self.request.sendall('started ue service'.encode('utf-8'))
+                    print('Sent response.')
+                    return
+                elif msg_[1].decode('utf-8').split()[0] == 'kill':
+                    arr = msg_[1].decode('utf-8').split()
+                    cmd = arr[0]
+                    proj = arr[1]
+                    print('Received {} Command from Admin application.'.format(cmd))
+                    # TODO: Will need to loop through all active instances
+                    url = 'http://localhost:8888/api/v1/projects/{}'.format(proj)
+                    r = requests.delete(url)
+                    self.request.sendall('project has been terminated'.encode('utf-8'))
+                    print('Sent response.')
+                    return
+                elif msg_[1].decode('utf-8') == 'get-measurements':
+                    # TODO: Expand to accept specific IMSI
+                    print('Received {} Command from Admin application.'.format(msg_[0]))
+                    url = 'http://localhost:8888/api/v1/users'
+                    r = requests.get(url)
+                    resp = json.loads(r.text)
+                    resp = pickle.dumps(resp)
+                    self.request.sendall(resp)
+                    print('Sent response.')
+                    return
 
             # Message from Slice Applications / Controller
             if msg_[0].decode('utf-8') == 'SLICE':
                 slice, proj_id = parse_empower_slice_msg(msg_)
                 self.handle_slice_creation(slice, proj_id)
-                # emp_addrs.add(self.client_address[0])
+                emp_addrs.add(self.client_address[0])
                 print('Slice Information has been updated.')
             elif msg_[0].decode('utf-8') == 'DEL_SLICE':
                 slice_id = msg_[1]
