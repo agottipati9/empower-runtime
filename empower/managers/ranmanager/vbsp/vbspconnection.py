@@ -294,8 +294,10 @@ class VBSPConnection(RANConnection):
         # Project lte slices are None but Wifi has a slice??
         # self.log.debug(project.to_dict())
         # proj_slices = bytes(str(project.to_dict()['lte_slices']), 'utf-8')
+        # self.log.debug(project.to_str())
 
-        msg = "SLICE".encode('utf-8') + b'\n\n\n' + slc.to_str().encode('utf-8') # + b'\n\n\n' + proj_slices
+        msg = "SLICE".encode('utf-8') + b'\n\n\n' + slc.to_str().encode('utf-8') + b'\n\n\n' + \
+              project.to_str().encode('utf-8')
         HOST, PORT = "localhost", 9999
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 

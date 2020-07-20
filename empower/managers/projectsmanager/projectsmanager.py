@@ -132,7 +132,7 @@ class EmpowerProjectsManager(ProjectsManager):
             project.save()
 
             project.upsert_wifi_slice(slice_id=0)
-            project.upsert_lte_slice(slice_id=randint(0, 100000))
+            project.upsert_lte_slice(slice_id=0)
 
         except ValueError as ex:
             self.remove(project.project_id)

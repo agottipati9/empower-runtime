@@ -14,7 +14,8 @@ g_prb_total = Gauge('n_prb_total', 'total number of physical resource blocks for
 g_rbgs_total = Gauge('rbgs_total', 'total number of Radio block groups for an instance', ['ip', 'mac'])
 g_dl_freq = Gauge('dl_earfcn', 'Downlink Center Frequency for an instance', ['ip', 'mac'])
 g_ul_freq = Gauge('ul_earfcn', 'Uplink Center Frequency for an instance', ['ip', 'mac'])
-g_slice_rbgs = Gauge('n_rbgs_alloc', 'number of allocated resource block groups for a slice', ['ip', 'sliceId'])
+g_slice_rbgs = Gauge('n_rbgs_alloc', 'number of allocated resource block groups for a slice', ['ip', 'projId',
+                                                                                               'sliceId'])
 
 # Resources by Instance:
 g_prb_available = Gauge('n_prb_open', 'number of available physical resource blocks for an instance', ['ip'])
@@ -39,7 +40,8 @@ policy_type = ''
 # Addresses
 valid_addr = set([])  # Authorized addresses
 emp_control_vbs = {}  # {"": set([])} IP to VBS macs
-emp_control_slices = {}  # {"": set([])} IP to Slice IDs
+emp_control_slices = {}  # {"": set([])} Projects to Slice IDs
+emp_control_projects = {}  # {"": set([])} IP to Projects
 emp_addrs = set([])  # In use addresses
 
 
@@ -66,7 +68,7 @@ def add_to_dict(sample_list, type):
         print('Error. Invalid Metric Type.')
 
 
-def update_slice_stats(addr, slc_id, value, rem=False):
+def update_slice_stats(addr, proj_id, slc_id, value, rem=False):
     """Updates slice information both locally and via prometheus."""
 
     """
@@ -87,20 +89,22 @@ def update_slice_stats(addr, slc_id, value, rem=False):
     if rem:
         return
 
-    # Update local view of slices
-    if addr not in emp_control_slices:
-        emp_control_slices[addr] = set([slc_id])
+    # Update local view of slices (ip -> project -> slices)
+    if addr not in emp_control_projects:
+        emp_control_projects[addr] = set([proj_id])
+        emp_control_slices[proj_id] = set([slc_id])
     else:
-        emp_control_slices[addr].add(slc_id)
+        emp_control_projects[addr].add(proj_id)
+        emp_control_slices[proj_id].add(slc_id)
 
     # Update local view of slice resources
     if (addr, slc_id) in emp_local_slice_met.keys():
-        emp_local_slice_met[(addr, slc_id)]['rbgs'] = value
+        emp_local_slice_met[(addr, proj_id, slc_id)]['rbgs'] = value
     else:
-        emp_local_slice_met[(addr, slc_id)] = {'rbgs': value}
+        emp_local_slice_met[(addr, proj_id, slc_id)] = {'rbgs': value}
 
     # Update Prometheus
-    g_slice_rbgs.labels(addr, slc_id).set(value)
+    g_slice_rbgs.labels(addr, proj_id, slc_id).set(value)
 
 
 def update_metrics(ip, res):
@@ -176,10 +180,8 @@ def parse_empower_slice_msg(msg):
     slice = msg[1].decode('utf-8').split()
 
     # get resource abstractions (proj may not have any needed infos except id?)
-    # proj = msg[1].decode('utf-8')
-    # print(proj)
-    # return slice, proj
-    return slice
+    proj = msg[2].decode('utf-8')
+    return slice, proj
 
 
 def check_msg_format(control):
@@ -312,9 +314,17 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         # Handle only valid packets and respond based on protocol
         try:
+            # Testing for Admin Application
+            if msg_[0].decode('utf-8') == 'test':
+                print('Received Command from Admin application.')
+                self.request.sendall(bytes('ok', 'utf-8'))
+                print('Sent response.')
+                return
+
+            # Message from Slice Applications / Controller
             if msg_[0].decode('utf-8') == 'SLICE':
-                slice = parse_empower_slice_msg(msg_)
-                self.handle_slice_creation(slice)
+                slice, proj_id = parse_empower_slice_msg(msg_)
+                self.handle_slice_creation(slice, proj_id)
                 # emp_addrs.add(self.client_address[0])
                 print('Slice Information has been updated.')
             elif msg_[0].decode('utf-8') == 'DEL_SLICE':
@@ -335,11 +345,11 @@ class TCPHandler(socketserver.BaseRequestHandler):
             print(traceback.format_exc())
             self.send_rejection('Received Malicious Control Packet.')
 
-    def handle_slice_creation(self, slice):
+    def handle_slice_creation(self, slice, proj_id):
         """Handles a slice creation message."""
-        slice_id = slice[2]  # Maybe should use project id instead??
+        slice_id = slice[2]
         rgbs = slice[4]
-        update_slice_stats(self.client_address[0], slice_id, rgbs)
+        update_slice_stats(self.client_address[0], proj_id, slice_id, rgbs)
 
     def handle_slice_deletion(self, slice_id):
         """Handles a slice deletion message."""
@@ -373,7 +383,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         parse_metrics(v_metrics, 'v')
         parse_metrics(c_metrics, 'c')
 
-        # Make Decision
+        # Make Decision (update to make decision on project not just instance...)
         resp = select_policy(self.client_address[0], emp_valid_met, emp_ctrl_met, msg_type, result_type, action_type)
 
         # Update Metrics
