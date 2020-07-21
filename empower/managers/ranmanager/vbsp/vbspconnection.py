@@ -320,7 +320,7 @@ class VBSPConnection(RANConnection):
 
     def send_del_slice(self, project, slc, cell):
         """Send a DEL_SLICE message."""
-        msg = "DEL_SLICE".encode('utf-8') + b'\n\n\n' + slc.slice_id
+        msg = "DEL_SLICE".encode('utf-8') + b'\n\n\n' + slc.slice_id + b'\n\n\n' + project.to_str().encode('utf-8')
         HOST, PORT = "localhost", 9999
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 

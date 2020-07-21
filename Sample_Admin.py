@@ -5,6 +5,7 @@ import configparser
 import traceback
 import socket
 import pprint
+from os import system
 
 HOST = "localhost"
 PORT = 9999
@@ -36,6 +37,8 @@ def main():
                 print('ERROR: Unknown command.')
             elif cmd_ == 'blank':
                 print('admin@Controller:~$ ')
+            elif cmd_ == 'clear':
+                clear()
             else:
                 # Determine command
                 if cmd_[0] == 'exit':
@@ -58,7 +61,7 @@ def main():
                     m = 'Getting measurements...'
                     execute_cmd(cmd, sock, m)
                 else:
-                    print('ERROR: Unknown command.')
+                    print('ERROR: Command has not been implemented.')
 
 
 def parse_cmd(cmd):
@@ -69,6 +72,10 @@ def parse_cmd(cmd):
     if len(cmd_arr) == 0:
         return 'blank'
 
+    # Clear
+    if cmd_arr[0] == 'clear':
+        return 'clear'
+
     # Valid Commands
     if cmd_arr[0] != 'exit' and cmd_arr[0] != 'test' and cmd_arr[0] != 'get-all' and \
             cmd_arr[0] != 'kill' and cmd_arr[0] != 'start' and cmd_arr[0] != 'get-slices'\
@@ -76,7 +83,7 @@ def parse_cmd(cmd):
         return None
 
     # Argument Checks
-    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0 == 'get-measurements']) \
+    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'get-measurements') \
             and len(cmd_arr) > 1:
         return None
     elif (cmd_arr[0] == 'kill' or cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
@@ -91,22 +98,32 @@ def execute_cmd(cmd, sock, m):
     """Executes a command."""
     # Send command to master controller
     send_cmd(cmd, sock, m)
-    received = sock.recv(2048)
-
-    data = pickle.loads(received)
-    pp.pprint(data)
 
     # Receive response from Master
-    # try:
-    #     received = str(sock.recv(1024), "utf-8")
-    # except:
-    #     received = pickle.loads(received)
+    isObj = False
+    received = sock.recv(2048)
+    arr = received.split(b'\n\n\n')
 
-    if received != 'NO':
-        pass
-        # print(received, '\n')
+    # Parse Response
+    if arr[0].decode('utf-8') == 'TEXT':
+        received = str(arr[1], "utf-8")
+    elif arr[0].decode('utf-8') == 'OBJ':
+        received = pickle.loads(arr[1])
+        isObj = True
+    elif arr[0].decode('utf-8') == 'NO':
+        received = str(arr[0], "utf-8")
     else:
-        print('Error received from server. Try again.', '\n')
+        print('Error: Received unknown response {}.'.format(arr[0].decode('utf-8')))
+        return
+
+    # Print response
+    if received != 'NO':
+        if isObj:
+            pp.pprint(received)
+        else:
+            print(received, '\n')
+    else:
+        print('Error response received from server. Try again.', '\n')
 
 
 def send_cmd(cmd, sock, m):
@@ -114,6 +131,11 @@ def send_cmd(cmd, sock, m):
     msg = 'ADMIN'.encode('utf-8') + b'\n\n\n' + cmd.encode('utf-8')
     print(m)
     sock.sendall(msg)
+
+
+def clear():
+    """Clears the terminal window."""
+    _ = system('clear')
 
 
 if __name__ == "__main__":

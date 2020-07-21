@@ -314,86 +314,35 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         # Handle only valid packets and respond based on protocol
         try:
-            # Testing for Admin Application
+            # Admin Application
             if msg_[0].decode('utf-8') == 'ADMIN':
-                if msg_[1].decode('utf-8') == 'test':
-                    print('Received {} Command from Admin application.'.format(msg_[0]))
-                    self.request.sendall(bytes('ok', 'utf-8'))
-                    print('Sent response.')
-                    return
-                elif msg_[1].decode('utf-8') == 'get-all':
-                    print('Received {} Command from Admin application.'.format(msg_[0]))
-
-                    # TODO: Will need to loop through all active instances
-                    r = requests.get('http://localhost:8888/api/v1/projects/')
-                    resp = json.loads(r.text)
-                    resp = pickle.dumps(resp)
-                    self.request.sendall(resp)
-                    print('Sent response.')
-                    return
-                elif msg_[1].decode('utf-8').split()[0] == 'start':
-                    arr = msg_[1].decode('utf-8').split()
-                    cmd = arr[0]
-                    proj = arr[1]
-                    app = arr[2]
-                    data = {}
-                    print('Received {} Command from Admin application.'.format(cmd))
-
-                    if app == 'ue-measurements':
-                        data = {'version': '1.0',
-                                'name': 'empower.apps.uemeasurements.uemeasurements',
-                                'params':{
-                                    'every': 5000
-                                }}
-
-                    # TODO: Will need to loop through all active instances
-                    url = 'http://localhost:8888/api/v1/projects/{}/apps'.format(proj)
-                    r = requests.post(url, data=data)
-                    self.request.sendall('started ue service'.encode('utf-8'))
-                    print('Sent response.')
-                    return
-                elif msg_[1].decode('utf-8').split()[0] == 'kill':
-                    arr = msg_[1].decode('utf-8').split()
-                    cmd = arr[0]
-                    proj = arr[1]
-                    print('Received {} Command from Admin application.'.format(cmd))
-                    # TODO: Will need to loop through all active instances
-                    url = 'http://localhost:8888/api/v1/projects/{}'.format(proj)
-                    r = requests.delete(url)
-                    self.request.sendall('project has been terminated'.encode('utf-8'))
-                    print('Sent response.')
-                    return
-                elif msg_[1].decode('utf-8') == 'get-measurements':
-                    # TODO: Expand to accept specific IMSI
-                    print('Received {} Command from Admin application.'.format(msg_[0]))
-                    url = 'http://localhost:8888/api/v1/users'
-                    r = requests.get(url)
-                    resp = json.loads(r.text)
-                    resp = pickle.dumps(resp)
-                    self.request.sendall(resp)
-                    print('Sent response.')
-                    return
-
+                self.handle_admin_control(msg_)
             # Message from Slice Applications / Controller
-            if msg_[0].decode('utf-8') == 'SLICE':
-                slice, proj_id = parse_empower_slice_msg(msg_)
-                self.handle_slice_creation(slice, proj_id)
-                emp_addrs.add(self.client_address[0])
-                print('Slice Information has been updated.')
-            elif msg_[0].decode('utf-8') == 'DEL_SLICE':
-                slice_id = msg_[1]
-                self.handle_slice_deletion(slice_id)
-                print('Slice Information has been updated.')
-            elif msg_[0].decode('utf-8') == 'CONTROL':
-                control, resources = parse_empower_ctrl_msg(msg_)
-                resp = self.handle_control_msg(control, resources)
-                # emp_addrs.add(self.client_address[0])
-                if resp == 'NO':
-                    print('rejected')
-                    self.send_rejection('Received Malicious Control Packet.')
+            else:
+                cmd = msg_[0].decode('utf-8')
+                if cmd == 'SLICE':
+                    slice, proj_id = parse_empower_slice_msg(msg_)
+                    self.handle_slice_creation(slice, proj_id)
+                    emp_addrs.add(self.client_address[0])
+                    print('Slice Information has been updated.')
+                elif cmd == 'DEL_SLICE':
+                    slice_id, proj_id = parse_empower_slice_msg(msg_)
+                    self.handle_slice_deletion(slice_id[0], proj_id)
+                    print('Slice Information has been updated.')
+                elif cmd == 'CONTROL':
+                    control, resources = parse_empower_ctrl_msg(msg_)
+                    resp = self.handle_control_msg(control, resources)
+                    # emp_addrs.add(self.client_address[0])
+                    if resp == 'NO':
+                        print('rejected')
+                        self.send_rejection('Received Malicious Control Packet.')
+                    else:
+                        self.request.sendall(bytes(resp, "utf-8"))
+                        print("Sent Response")
                 else:
-                    self.request.sendall(bytes(resp, "utf-8"))
-                    print("Sent Response")
+                    print("Received Unknown Controller Command {}".format(cmd))
+                    self.request.sendall(bytes('NO', "utf-8"))
+
         except Exception as e:
             print(traceback.format_exc())
             self.send_rejection('Received Malicious Control Packet.')
@@ -404,9 +353,9 @@ class TCPHandler(socketserver.BaseRequestHandler):
         rgbs = slice[4]
         update_slice_stats(self.client_address[0], proj_id, slice_id, rgbs)
 
-    def handle_slice_deletion(self, slice_id):
+    def handle_slice_deletion(self, slice_id, proj_id):
         """Handles a slice deletion message."""
-        update_slice_stats(self.client_address[0], slice_id, 0, rem=True)
+        update_slice_stats(self.client_address[0], proj_id, slice_id, 0, rem=True)
 
     def handle_control_msg(self, control, resources):
         """Handles control messages."""
@@ -444,6 +393,91 @@ class TCPHandler(socketserver.BaseRequestHandler):
             update_metrics(self.client_address[0], resources)
 
         return resp
+
+    def handle_admin_control(self, msg_):
+        """Handles an admin control message."""
+        cmd = msg_[1].decode('utf-8')
+        if cmd == 'test':
+            print('Received {} Command from Admin application.'.format(cmd))
+            self.send_admin_response(msg=bytes('TEXT\n\n\nok', 'utf-8'))
+        elif cmd == 'get-all':
+            print('Received {} Command from Admin application.'.format(cmd))
+            self.handle_admin_get_all()
+        elif cmd.split()[0] == 'start':
+            arr = cmd.split()
+            print('Received {} Command from Admin application.'.format(arr[0]))
+            self.handle_admin_start(proj=arr[1], app_type=arr[2])
+        elif cmd.split()[0] == 'kill':
+            arr = cmd.split()
+            print('Received {} Command from Admin application.'.format(arr[0]))
+            self.handle_admin_kill(proj=arr[1])
+        elif cmd == 'get-measurements':
+            print('Received {} Command from Admin application.'.format(cmd))
+            self.handle_admin_measurements()
+        else:
+            print('Received Unknown Command from Admin application.')
+            self.send_admin_response(msg=bytes('NO', 'utf-8'))
+
+    def handle_admin_get_all(self):
+        """Handles an admin get-all request."""
+        # TODO: Will need to loop through all active instances
+        r = requests.get('http://localhost:8888/api/v1/projects/')
+        resp = pickle.dumps(json.loads(r.text))
+        resp = 'OBJ\n\n\n'.encode('utf-8') + resp
+        self.send_admin_response(resp, r)
+
+    def handle_admin_start(self, proj, app_type):
+        """Handles an admin start request."""
+        data = {}
+        imsi = 998981234560301
+        # TODO: Support more app_types
+        # TODO: Need to accept IMSI as argument
+        # TODO: Need to accept meas_id as argument
+        if app_type == 'ue-measurements':
+            data = {"version": "1.0",
+                    "name": 'empower.apps.uemeasurements.uemeasurements',
+                    "params": {
+                        "amount": "INFINITY",
+                        "imsi": str(imsi),
+                        "meas_id": "1",
+                        "interval": "MS480"
+                    }}
+
+        # TODO: Will need to loop through all active instances
+        url = 'http://localhost:8888/api/v1/projects/{}/apps'.format(proj)
+        j = json.dumps(data)
+        print(j)
+        r = requests.post(url, data=j, auth=('root', 'root'))
+        resp = 'TEXT\n\n\nstarted ue service'.encode('utf-8')
+        self.send_admin_response(resp, r)
+
+    def handle_admin_kill(self, proj):
+        """Handles an admin kill request."""
+
+        # TODO: Will need to loop through all active instances
+        url = 'http://localhost:8888/api/v1/projects/{}'.format(proj)
+        r = requests.delete(url, auth=('root', 'root'))
+        resp = 'TEXT\n\n\nproject has been terminated'.encode('utf-8')
+        self.send_admin_response(resp, r)
+
+    def handle_admin_measurements(self):
+        """Handles an admin get-measurements request."""
+        # TODO: Expand to accept specific IMSI
+        url = 'http://localhost:8888/api/v1/users'
+        r = requests.get(url)
+        resp = pickle.dumps(json.loads(r.text))
+        resp = 'OBJ\n\n\n'.encode('utf-8') + resp
+        self.send_admin_response(resp, r)
+
+    def send_admin_response(self, msg, r=None):
+        # Received an error
+        if r is not None and (r.status_code < 200 or r.status_code > 204):
+            print('ISSUE:', r.text)
+            self.request.sendall(bytes('NO', 'utf-8'))
+
+        # Send response
+        self.request.sendall(msg)
+        print('Sent response.')
 
     def send_rejection(self, msg):
         """Sends a rejection to the controller and prints the msg via stdout."""
