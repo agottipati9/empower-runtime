@@ -51,10 +51,10 @@ def main():
                     m = 'Executing test command...'
                     execute_cmd(cmd, sock, m)
                 elif cmd_[0] == 'get-all':
-                    m = 'Getting all slice information...'
+                    m = 'Getting all project information...'
                     execute_cmd(cmd, sock, m)
                 elif cmd_[0] == 'start':
-                    m = 'Getting all slice information...'
+                    m = 'Starting slice service...'
                     execute_cmd(cmd, sock, m)
                 elif cmd_[0] == 'kill':
                     m = 'Removing project...'
@@ -174,7 +174,7 @@ def help():
     print('create-project - Creates a project - "create-project" ')
     print('create-slice - Creates a slice on a project - "create-slice project_id [slice_id]" ')
     print('update-slice - Updates a slice on a project - "update-slice project_id slice_id [rgbs] [ue_scheduler]'
-          '\n\t UE_SCHEDULER: 0 - Round Robin \t 1 - Weighted Fair Queueing"\n')
+          '\n\t UE_SCHEDULER: 0 - Round Robin')
 
 
 if __name__ == "__main__":
