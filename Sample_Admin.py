@@ -71,6 +71,9 @@ def main():
                 elif cmd_[0] == 'update-slice':
                     m = 'Updating Slice...'
                     execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'get-slices':
+                    m = 'Getting slice information...'
+                    execute_cmd(cmd, sock, m)
                 else:
                     print('ERROR: Command has not been implemented.')
 
@@ -102,8 +105,8 @@ def parse_cmd(cmd):
     if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'create-project') \
             and len(cmd_arr) > 1:
         return None
-    # elif (cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
-    #     return None
+    elif (cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
+        return None
     elif cmd_arr[0] == 'start' and len(cmd_arr) != 3:
         return None
     elif cmd_arr[0] == 'get-measurements' and (len(cmd_arr) < 1 or len(cmd_arr) > 2):
@@ -164,6 +167,7 @@ def help():
     """Prints out all the commands."""
     print('test - Sends a test command to the master controller and returns ok if successful - "test" ')
     print('get-all - Returns all the project information for all instances  - "get-all" ')
+    print('get-slices - Returns all slice information in a project - "get-slices project_id"')
     print('kill - Ends a project or removes a slice - "kill project_id [slice_id]" ')
     print('start - starts an application - "start project_id app_type"\n\t APP TYPES: ue-measurements ')
     print('get-measurements - Returns all UE measurements - "get-measurements [imsi]" ')
