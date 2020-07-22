@@ -24,6 +24,10 @@ g_prb_util_ul = Gauge('prb_util_ul', 'progressive counter of UL PRBs scheduled s
 g_prb_util_dl = Gauge('prb_util_dl', 'progressive counter of DL PRBs scheduled so far in an instance', ['ip'])
 c_num_req = Counter('number_of_requests', 'Number of Control Requests for an instance', ['ip'])
 
+# Admin Supported Commands
+valid_admin_cmd = set(['test', 'get-all', 'start', 'kill', 'get-measurements', 'create-project',
+                       'create-slice', 'update-slice'])
+
 # Empower Protocol Constants
 emp_crud_result = {"0": "UNDEFINED", "1": "UPDATE", "2": "CREATE", "3": "DELETE", "4": "RETRIEVE"}
 emp_msg_type = {"0": "REQUEST", "1": "RESPONSE"}
@@ -268,10 +272,10 @@ def invalid_net_state(ctrl_met):
     """Checks for valid network state. Returns true if net state is out of bounds, and false otherwise."""
     # TODO: Update to filter based on labels for certain metrics
     return ctrl_met['node_netstat_Tcp_OutSegs']['value'] / 100000 > thresholds['tcp_in_out'] \
-        or ctrl_met['node_sockstat_TCP_mem_bytes']['value'] / 100000 > thresholds['sockstat_mem'] \
-        or ctrl_met['node_sockstat_TCP_tw']['value'] > thresholds['sockstat_tcp'] \
-        or ctrl_met['node_netstat_Tcp_PassiveOpens']['value'] / 1000 > thresholds['tcp_direct_trans'] \
-        or ctrl_met['node_network_receive_bytes_total']['value'] / 10000 > thresholds['net_traffic']
+           or ctrl_met['node_sockstat_TCP_mem_bytes']['value'] / 100000 > thresholds['sockstat_mem'] \
+           or ctrl_met['node_sockstat_TCP_tw']['value'] > thresholds['sockstat_tcp'] \
+           or ctrl_met['node_netstat_Tcp_PassiveOpens']['value'] / 1000 > thresholds['tcp_direct_trans'] \
+           or ctrl_met['node_network_receive_bytes_total']['value'] / 10000 > thresholds['net_traffic']
 
 
 def get_slices(addr=None):
@@ -397,26 +401,36 @@ class TCPHandler(socketserver.BaseRequestHandler):
     def handle_admin_control(self, msg_):
         """Handles an admin control message."""
         cmd = msg_[1].decode('utf-8')
+        if cmd not in valid_admin_cmd:
+            print('Received Unknown Command from Admin application.')
+            self.send_admin_response(msg=bytes('NO', 'utf-8'))
+        else:
+            if cmd.split()[0] == 'start' or cmd.split()[0] == 'kill':
+                print('Received {} Command from Admin application.'.format(cmd.split()[0]))
+            else:
+                print('Received {} Command from Admin application.'.format(cmd))
+            self.execute_admin_control(cmd)
+
+    def execute_admin_control(self, cmd):
+        """Executes an admin control."""
         if cmd == 'test':
-            print('Received {} Command from Admin application.'.format(cmd))
             self.send_admin_response(msg=bytes('TEXT\n\n\nok', 'utf-8'))
         elif cmd == 'get-all':
-            print('Received {} Command from Admin application.'.format(cmd))
             self.handle_admin_get_all()
         elif cmd.split()[0] == 'start':
             arr = cmd.split()
-            print('Received {} Command from Admin application.'.format(arr[0]))
             self.handle_admin_start(proj=arr[1], app_type=arr[2])
         elif cmd.split()[0] == 'kill':
             arr = cmd.split()
-            print('Received {} Command from Admin application.'.format(arr[0]))
             self.handle_admin_kill(proj=arr[1])
         elif cmd == 'get-measurements':
-            print('Received {} Command from Admin application.'.format(cmd))
             self.handle_admin_measurements()
-        else:
-            print('Received Unknown Command from Admin application.')
-            self.send_admin_response(msg=bytes('NO', 'utf-8'))
+        elif cmd == 'create-project':
+            self.handle_admin_create_proj()
+        elif cmd == 'create-slice':
+            self.handle_admin_create_slice()
+        elif cmd == 'update-slice':
+            self.handle_admin_update_slice()
 
     def handle_admin_get_all(self):
         """Handles an admin get-all request."""
@@ -445,28 +459,100 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         # TODO: Will need to loop through all active instances
         url = 'http://localhost:8888/api/v1/projects/{}/apps'.format(proj)
-        j = json.dumps(data)
-        print(j)
-        r = requests.post(url, data=j, auth=('root', 'root'))
+        data = json.dumps(data)
+        r = requests.post(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nstarted ue service'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-    def handle_admin_kill(self, proj):
-        """Handles an admin kill request."""
+    def handle_admin_kill(self, proj, slice_id=None):
+        """Handles an admin kill project/slice request."""
 
         # TODO: Will need to loop through all active instances
-        url = 'http://localhost:8888/api/v1/projects/{}'.format(proj)
+        if slice_id is not None:
+            url = 'http://localhost:8888/api/v1/projects/{}/lte_slices/{}'.format(proj, slice_id)
+            resp = 'TEXT\n\n\nSlice has been terminated'.encode('utf-8')
+        else:
+            url = 'http://localhost:8888/api/v1/projects/{}'.format(proj)
+            resp = 'TEXT\n\n\nProject has been terminated'.encode('utf-8')
+
         r = requests.delete(url, auth=('root', 'root'))
-        resp = 'TEXT\n\n\nproject has been terminated'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-    def handle_admin_measurements(self):
+    def handle_admin_measurements(self, imsi=None):
         """Handles an admin get-measurements request."""
         # TODO: Expand to accept specific IMSI
-        url = 'http://localhost:8888/api/v1/users'
+
+        if imsi is None:
+            url = 'http://localhost:8888/api/v1/users'
+        else:
+            url = 'http://localhost:8888/api/v1/users/{}'.format(imsi)
+
         r = requests.get(url)
         resp = pickle.dumps(json.loads(r.text))
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
+        self.send_admin_response(resp, r)
+
+    def handle_admin_create_proj(self):
+        """Handles an admin create-project request."""
+        # TODO: Need to accept desc as argument
+        # TODO: Need to accept owner as argument
+        # TODO: Need to accept plmn_id as argument
+        data = {"version": "1.0",
+                "desc": 'test',
+                "owner": "foo",
+                "wifi_props": "null",
+                "lte_props": {
+                    "plmnid": "99898"
+                }
+                }
+
+        # TODO: Will need to filter by instance
+        url = 'http://localhost:8888/api/v1/projects/'
+        data = json.dumps(data)
+        r = requests.post(url, data=data, auth=('root', 'root'))
+        resp = 'TEXT\n\n\nProject has been created.'.encode('utf-8')
+        self.send_admin_response(resp, r)
+
+    def handle_admin_create_slice(self, proj, slice_id):
+        """Handles an admin create-slice request."""
+        # TODO: Need to accept devices as argument
+        # TODO: Need to accept properties as arguments
+        # TODO: Need to accept slice_id as argument
+        data = {"version": "1.0",
+                "slice_id": 1,
+                "properties": {
+                    "rgbs": 5,
+                    "ue_scheduler": 0
+                },
+                "devices": {}
+                }
+
+        # TODO: Will need to loop through all active instances
+        url = 'http://localhost:8888/api/v1/projects/{}/lte_slices/{}'.format(proj, slice_id)
+        data = json.dumps(data)
+        r = requests.post(url, data=data, auth=('root', 'root'))
+        resp = 'TEXT\n\n\nSlice has been created.'.encode('utf-8')
+        self.send_admin_response(resp, r)
+
+    def handle_admin_update_slice(self, proj, slice_id, rgbs, ue_scheduler=0):
+        """Handles an admin update-slice request."""
+        # TODO: Need to accept devices as argument
+        # TODO: Need to accept properties as arguments (rgbs, ue_scheduler)
+        # TODO: Need to accept devices as arguments
+        data = {"version": "1.0",
+                "slice_id": slice_id,
+                "properties": {
+                    "rgbs": rgbs,
+                    "ue_scheduler": ue_scheduler
+                },
+                "devices": {}
+                }
+
+        # TODO: Will need to filter instances
+        url = 'http://localhost:8888/api/v1/projects/{}/lte_slices/{}'.format(proj, slice_id)
+        data = json.dumps(data)
+        r = requests.put(url, data=data, auth=('root', 'root'))
+        resp = 'TEXT\n\n\nSlice has been updated.'.encode('utf-8')
         self.send_admin_response(resp, r)
 
     def send_admin_response(self, msg, r=None):

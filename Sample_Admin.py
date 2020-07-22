@@ -60,6 +60,15 @@ def main():
                 elif cmd_[0] == 'get-measurements':
                     m = 'Getting measurements...'
                     execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'create-project':
+                    m = 'Creating Project...'
+                    execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'create-slice':
+                    m = 'Creating Slice...'
+                    execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'update-slice':
+                    m = 'Updating Slice...'
+                    execute_cmd(cmd, sock, m)
                 else:
                     print('ERROR: Command has not been implemented.')
 
@@ -79,17 +88,18 @@ def parse_cmd(cmd):
     # Valid Commands
     if cmd_arr[0] != 'exit' and cmd_arr[0] != 'test' and cmd_arr[0] != 'get-all' and \
             cmd_arr[0] != 'kill' and cmd_arr[0] != 'start' and cmd_arr[0] != 'get-slices'\
-            and cmd_arr[0] != 'get-measurements':
+            and cmd_arr[0] != 'get-measurements' and cmd_arr[0] != 'create-project'\
+            and cmd_arr[0] != 'create-slice' and cmd_arr[0] != 'update-slice':
         return None
 
     # Argument Checks
-    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'get-measurements') \
-            and len(cmd_arr) > 1:
-        return None
-    elif (cmd_arr[0] == 'kill' or cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
-        return None
-    elif cmd_arr[0] == 'start' and len(cmd_arr) != 3:
-        return None
+    # if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'get-measurements') \
+    #         and len(cmd_arr) > 1:
+    #     return None
+    # elif (cmd_arr[0] == 'kill' or cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
+    #     return None
+    # elif cmd_arr[0] == 'start' and len(cmd_arr) != 3:
+    #     return None
 
     return cmd_arr
 
