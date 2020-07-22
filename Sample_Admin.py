@@ -39,6 +39,8 @@ def main():
                 print('admin@Controller:~$ ')
             elif cmd_ == 'clear':
                 clear()
+            elif cmd_ == 'help':
+                help()
             else:
                 # Determine command
                 if cmd_[0] == 'exit':
@@ -85,6 +87,10 @@ def parse_cmd(cmd):
     if cmd_arr[0] == 'clear':
         return 'clear'
 
+    # Help
+    if cmd_arr[0] == 'help':
+        return 'help'
+
     # Valid Commands
     if cmd_arr[0] != 'exit' and cmd_arr[0] != 'test' and cmd_arr[0] != 'get-all' and \
             cmd_arr[0] != 'kill' and cmd_arr[0] != 'start' and cmd_arr[0] != 'get-slices'\
@@ -93,13 +99,19 @@ def parse_cmd(cmd):
         return None
 
     # Argument Checks
-    # if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'get-measurements') \
-    #         and len(cmd_arr) > 1:
+    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'create-project') \
+            and len(cmd_arr) > 1:
+        return None
+    # elif (cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
     #     return None
-    # elif (cmd_arr[0] == 'kill' or cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
-    #     return None
-    # elif cmd_arr[0] == 'start' and len(cmd_arr) != 3:
-    #     return None
+    elif cmd_arr[0] == 'start' and len(cmd_arr) != 3:
+        return None
+    elif cmd_arr[0] == 'get-measurements' and (len(cmd_arr) < 1 or len(cmd_arr) > 2):
+        return None
+    elif (cmd_arr[0] == 'kill' or cmd_arr[0] == 'create-slice') and (len(cmd_arr) < 2 or len(cmd_arr) > 3):
+        return None
+    elif cmd_arr[0] == 'update-slice' and (len(cmd_arr) < 3 or len(cmd_arr) > 5):
+        return None
 
     return cmd_arr
 
@@ -146,6 +158,19 @@ def send_cmd(cmd, sock, m):
 def clear():
     """Clears the terminal window."""
     _ = system('clear')
+
+
+def help():
+    """Prints out all the commands."""
+    print('test - Sends a test command to the master controller and returns ok if successful - "test" ')
+    print('get-all - Returns all the project information for all instances  - "get-all" ')
+    print('kill - Ends a project or removes a slice - "kill project_id [slice_id]" ')
+    print('start - starts an application - "start project_id app_type"\n\t APP TYPES: ue-measurements ')
+    print('get-measurements - Returns all UE measurements - "get-measurements [imsi]" ')
+    print('create-project - Creates a project - "create-project" ')
+    print('create-slice - Creates a slice on a project - "create-slice project_id [slice_id]" ')
+    print('update-slice - Updates a slice on a project - "update-slice project_id slice_id [rgbs] [ue_scheduler]'
+          '\n\t UE_SCHEDULER: 0 - Round Robin \t 1 - Weighted Fair Queueing"\n')
 
 
 if __name__ == "__main__":
