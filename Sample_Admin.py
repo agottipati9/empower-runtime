@@ -126,11 +126,11 @@ def parse_cmd(cmd):
     elif (cmd_arr[0] == 'get-slices' or cmd_arr[0] == 'start-worker' or cmd_arr[0] == 'kill-worker'
           or cmd_arr[0] == 'get-apps') and len(cmd_arr) != 2:
         return None
-    elif (cmd_arr[0] == 'start-app' or cmd_arr[0] == 'kill-app') and len(cmd_arr) != 3:
+    elif (cmd_arr[0] == 'start-app' or cmd_arr[0] == 'kill-app' or cmd_arr[0] == 'create-slice') and len(cmd_arr) != 3:
         return None
     elif cmd_arr[0] == 'get-measurements' and (len(cmd_arr) < 1 or len(cmd_arr) > 2):
         return None
-    elif (cmd_arr[0] == 'kill' or cmd_arr[0] == 'create-slice') and (len(cmd_arr) < 2 or len(cmd_arr) > 3):
+    elif (cmd_arr[0] == 'kill') and (len(cmd_arr) < 2 or len(cmd_arr) > 3):
         return None
     elif cmd_arr[0] == 'update-slice' and (len(cmd_arr) < 3 or len(cmd_arr) > 5):
         return None
@@ -196,7 +196,7 @@ def help():
     print('start-worker - starts a worker - "start-worker worker_type"\n\t WORKER TYPES: mac-prb-util ')
     print('get-measurements - Returns all UE measurements - "get-measurements [imsi]" ')
     print('create-project - Creates a project - "create-project" ')
-    print('create-slice - Creates a slice on a project - "create-slice project_id [slice_id]" ')
+    print('create-slice - Creates a slice on a project - "create-slice project_id slice_id" ')
     print('update-slice - Updates a slice on a project - "update-slice project_id slice_id [rgbs] [ue_scheduler]'
           '\n\t UE_SCHEDULER: 0 - Round Robin')
 

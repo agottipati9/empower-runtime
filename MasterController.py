@@ -461,21 +461,13 @@ class TCPHandler(socketserver.BaseRequestHandler):
             else:
                 raise Exception('Error.')
         elif cmd[0] == 'create-project':
-            success = self.handle_admin_create_proj()
-            # TODO: Update LOCAL VIEW HERE NEED PROJECT ID
-            # if success:
-            #     self.handle_slice_creation(slice=('0', '5'), proj_id=project_id, admin=True)
+            self.handle_admin_create_proj()
         elif cmd[0] == 'create-slice':
             if len(cmd) == 3:
                 success = self.handle_admin_create_slice(cmd[1], cmd[2])
                 # Update Local View
                 if success:
                     self.handle_slice_creation(slice=(cmd[2], '5'), proj_id=cmd[1], admin=True)
-            elif len(cmd) == 2:
-                success = self.handle_admin_create_slice(cmd[1])
-                # TODO: Update LOCAL VIEW HERE NEED SLICE ID
-                # if success:
-                #     self.handle_slice_creation(slice=('id', '5'), proj_id=cmd[1], admin=True)
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'update-slice':
