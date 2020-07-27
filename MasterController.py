@@ -92,11 +92,13 @@ def update_slice_stats(addr, proj_id, slc_id, value, rem=False):
     # TODO: Update backend upon slice deletion
     # Gaurd for removing slice info
     if rem:
+        # if slc_id is None:
         return
 
     # Update local view of slices (ip -> project -> slices)
     if addr not in emp_control_projects:
         emp_control_projects[addr] = set([proj_id])
+    if proj_id not in emp_control_slices:
         emp_control_slices[proj_id] = set([slc_id])
     else:
         emp_control_projects[addr].add(proj_id)
@@ -356,11 +358,16 @@ class TCPHandler(socketserver.BaseRequestHandler):
             print(traceback.format_exc())
             self.send_rejection('Received Malicious Control Packet.')
 
-    def handle_slice_creation(self, slice, proj_id):
-        """Handles a slice creation message."""
-        slice_id = slice[2]
-        rgbs = slice[4]
-        update_slice_stats(self.client_address[0], proj_id, slice_id, rgbs)
+    def handle_slice_creation(self, slice, proj_id, admin=False):
+        """Handles a slice creation/update message."""
+        if admin:
+            slice_id = slice[0]
+            rbgs = slice[1]
+        else:
+            slice_id = slice[2]
+            rbgs = slice[4]
+
+        update_slice_stats(self.client_address[0], proj_id, slice_id, rbgs)
 
     def handle_slice_deletion(self, slice_id, proj_id):
         """Handles a slice deletion message."""
@@ -417,7 +424,6 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def execute_admin_control(self, cmd):
         """Executes an admin control."""
-        # cmd = cmd.split()
         if cmd[0] == 'test':
             self.send_admin_response(bytes('TEXT\n\n\nok', 'utf-8'))
         elif cmd[0] == 'get-all':
@@ -432,9 +438,15 @@ class TCPHandler(socketserver.BaseRequestHandler):
             self.handle_admin_get_workers()
         elif cmd[0] == 'kill':
             if len(cmd) == 3:
-                self.handle_admin_kill(cmd[1], cmd[2])
+                success = self.handle_admin_kill(cmd[1], cmd[2])
+                #  Update local view
+                if success:
+                    self.handle_slice_deletion(slice_id=cmd[2], proj_id=cmd[1])
             elif len(cmd) == 2:
-                self.handle_admin_kill(cmd[1])
+                success = self.handle_admin_kill(cmd[1])
+                #  Update local view
+                if success:
+                    self.handle_slice_deletion(slice_id=None, proj_id=cmd[1])
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'kill-app':
@@ -449,19 +461,34 @@ class TCPHandler(socketserver.BaseRequestHandler):
             else:
                 raise Exception('Error.')
         elif cmd[0] == 'create-project':
-            self.handle_admin_create_proj()
+            success = self.handle_admin_create_proj()
+            # TODO: Update LOCAL VIEW HERE NEED PROJECT ID
+            # if success:
+            #     self.handle_slice_creation(slice=('0', '5'), proj_id=project_id, admin=True)
         elif cmd[0] == 'create-slice':
             if len(cmd) == 3:
-                self.handle_admin_create_slice(cmd[1], cmd[2])
+                success = self.handle_admin_create_slice(cmd[1], cmd[2])
+                # Update Local View
+                if success:
+                    self.handle_slice_creation(slice=(cmd[2], '5'), proj_id=cmd[1], admin=True)
             elif len(cmd) == 2:
-                self.handle_admin_create_slice(cmd[1])
+                success = self.handle_admin_create_slice(cmd[1])
+                # TODO: Update LOCAL VIEW HERE NEED SLICE ID
+                # if success:
+                #     self.handle_slice_creation(slice=('id', '5'), proj_id=cmd[1], admin=True)
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'update-slice':
             if len(cmd) == 5:
-                self.handle_admin_update_slice(cmd[1], cmd[2], cmd[3], cmd[4])
+                success = self.handle_admin_update_slice(cmd[1], cmd[2], cmd[3], cmd[4])
+                #  Update local view
+                if success:
+                    self.handle_slice_creation(slice=(cmd[2], cmd[3]), proj_id=cmd[1], admin=True)
             elif len(cmd) == 4:
-                self.handle_admin_update_slice(cmd[1], cmd[2], cmd[3])
+                success = self.handle_admin_update_slice(cmd[1], cmd[2], cmd[3])
+                #  Update local view
+                if success:
+                    self.handle_slice_creation(slice=(cmd[2], cmd[3]), proj_id=cmd[1], admin=True)
             elif len(cmd) == 3:
                 self.handle_admin_update_slice(cmd[1], cmd[2])
             else:
@@ -557,6 +584,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
+        return 200 <= r.status_code <= 204
 
     def handle_admin_kill_app(self, proj, app_id, instance_id=0):
         """Handles an admin kill-app request."""
@@ -612,6 +640,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.post(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nProject has been created.'.encode('utf-8')
         self.send_admin_response(resp, r)
+        return 200 <= r.status_code <= 204
 
     def handle_admin_create_slice(self, proj, slice_id=1, instance_id=0):
         """Handles an admin create-slice request."""
@@ -633,6 +662,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.post(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nSlice has been created.'.encode('utf-8')
         self.send_admin_response(resp, r)
+        return 200 <= r.status_code <= 204
 
     def handle_admin_update_slice(self, proj, slice_id, rgbs=5, ue_scheduler=0, instance_id=0):
         """Handles an admin update-slice request."""
@@ -654,6 +684,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.put(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nSlice has been updated.'.encode('utf-8')
         self.send_admin_response(resp, r)
+        return 200 <= r.status_code <= 204
 
     def handle_admin_get_slices(self, proj_id, instance_id=0):
         """Handles an admin get-slices request."""
