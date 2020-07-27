@@ -7,9 +7,10 @@ import socket
 import pprint
 from os import system
 
-HOST = "localhost"
-PORT = 9999
-ISMI = 998981234560301
+HOST = "localhost"  # Configure to point at Master Controller
+PORT = 9999  # Configure to point at Master Controller
+# ISMI = 998981234560301  # nexus
+IMSI = 998980123456789  # srsue
 pp = pprint.PrettyPrinter(indent=2)
 
 
