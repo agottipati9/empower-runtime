@@ -54,11 +54,26 @@ def main():
                 elif cmd_[0] == 'get-all':
                     m = 'Getting all project information...'
                     execute_cmd(cmd, sock, m)
-                elif cmd_[0] == 'start':
+                elif cmd_[0] == 'get-workers':
+                    m = 'Getting all worker information...'
+                    execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'get-apps':
+                    m = 'Getting all application information...'
+                    execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'start-app':
                     m = 'Starting slice service...'
+                    execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'start-worker':
+                    m = 'Starting instance worker...'
                     execute_cmd(cmd, sock, m)
                 elif cmd_[0] == 'kill':
                     m = 'Removing project...'
+                    execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'kill-worker':
+                    m = 'Removing worker...'
+                    execute_cmd(cmd, sock, m)
+                elif cmd_[0] == 'kill-app':
+                    m = 'Removing application...'
                     execute_cmd(cmd, sock, m)
                 elif cmd_[0] == 'get-measurements':
                     m = 'Getting measurements...'
@@ -97,18 +112,21 @@ def parse_cmd(cmd):
 
     # Valid Commands
     if cmd_arr[0] != 'exit' and cmd_arr[0] != 'test' and cmd_arr[0] != 'get-all' and \
-            cmd_arr[0] != 'kill' and cmd_arr[0] != 'start' and cmd_arr[0] != 'get-slices'\
-            and cmd_arr[0] != 'get-measurements' and cmd_arr[0] != 'create-project'\
-            and cmd_arr[0] != 'create-slice' and cmd_arr[0] != 'update-slice':
+            cmd_arr[0] != 'kill' and cmd_arr[0] != 'start-app' and cmd_arr[0] != 'get-slices' \
+            and cmd_arr[0] != 'get-measurements' and cmd_arr[0] != 'create-project' \
+            and cmd_arr[0] != 'create-slice' and cmd_arr[0] != 'update-slice' and cmd_arr[0] != 'start-worker' \
+            and cmd_arr[0] != 'kill-app' and cmd_arr[0] != 'kill-worker' and cmd_arr[0] != 'get-apps' \
+            and cmd_arr[0] != 'get-workers':
         return None
 
     # Argument Checks
-    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'create-project') \
-            and len(cmd_arr) > 1:
+    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'create-project'
+        or cmd_arr[0] == 'get-workers') and len(cmd_arr) > 1:
         return None
-    elif (cmd_arr[0] == 'get-slices') and len(cmd_arr) != 2:
+    elif (cmd_arr[0] == 'get-slices' or cmd_arr[0] == 'start-worker' or cmd_arr[0] == 'kill-worker'
+          or cmd_arr[0] == 'get-apps') and len(cmd_arr) != 2:
         return None
-    elif cmd_arr[0] == 'start' and len(cmd_arr) != 3:
+    elif (cmd_arr[0] == 'start-app' or cmd_arr[0] == 'kill-app') and len(cmd_arr) != 3:
         return None
     elif cmd_arr[0] == 'get-measurements' and (len(cmd_arr) < 1 or len(cmd_arr) > 2):
         return None
@@ -169,8 +187,13 @@ def help():
     print('test - Sends a test command to the master controller and returns ok if successful - "test" ')
     print('get-all - Returns all the project information for all instances  - "get-all" ')
     print('get-slices - Returns all slice information in a project - "get-slices project_id"')
+    print('get-apps - Returns all the applications running on a project  - "get-apps" ')
+    print('get-workers - Returns all the workers running on an instance - "get-workers"')
     print('kill - Ends a project or removes a slice - "kill project_id [slice_id]" ')
-    print('start - starts an application - "start project_id app_type"\n\t APP TYPES: ue-measurements ')
+    print('kill-app - Ends an application - "kill-app project_id app_id" ')
+    print('kill-worker - Ends a worker - "kill worker_id" ')
+    print('start-app - starts an application - "start-app project_id app_type"\n\t APP TYPES: ue-measurements ')
+    print('start-worker - starts a worker - "start-worker worker_type"\n\t WORKER TYPES: mac-prb-util ')
     print('get-measurements - Returns all UE measurements - "get-measurements [imsi]" ')
     print('create-project - Creates a project - "create-project" ')
     print('create-slice - Creates a slice on a project - "create-slice project_id [slice_id]" ')
@@ -180,4 +203,3 @@ def help():
 
 if __name__ == "__main__":
     main()
-

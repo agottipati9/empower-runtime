@@ -25,8 +25,9 @@ g_prb_util_dl = Gauge('prb_util_dl', 'progressive counter of DL PRBs scheduled s
 c_num_req = Counter('number_of_requests', 'Number of Control Requests for an instance', ['ip'])
 
 # Admin Supported Commands
-valid_admin_cmd = set(['test', 'get-all', 'start', 'kill', 'get-measurements', 'create-project',
-                       'create-slice', 'update-slice', 'get-slices'])
+valid_admin_cmd = set(['test', 'get-all', 'start-app', 'start-worker', 'kill', 'get-measurements', 'create-project',
+                       'create-slice', 'update-slice', 'get-slices', 'get-apps', 'get-workers', 'kill-app',
+                       'kill-worker'])
 
 # Empower Protocol Constants
 emp_crud_result = {"0": "UNDEFINED", "1": "UPDATE", "2": "CREATE", "3": "DELETE", "4": "RETRIEVE"}
@@ -421,8 +422,14 @@ class TCPHandler(socketserver.BaseRequestHandler):
             self.send_admin_response(bytes('TEXT\n\n\nok', 'utf-8'))
         elif cmd[0] == 'get-all':
             self.handle_admin_get_all()
-        elif cmd[0] == 'start':
-            self.handle_admin_start(cmd[1], cmd[2])
+        elif cmd[0] == 'start-app':
+            self.handle_admin_start_app(cmd[1], cmd[2])
+        elif cmd[0] == 'start-worker':
+            self.handle_admin_start_worker(cmd[1])
+        elif cmd[0] == 'get-apps':
+            self.handle_admin_get_apps(proj_id=cmd[1])
+        elif cmd[0] == 'get-workers':
+            self.handle_admin_get_workers()
         elif cmd[0] == 'kill':
             if len(cmd) == 3:
                 self.handle_admin_kill(cmd[1], cmd[2])
@@ -430,6 +437,10 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 self.handle_admin_kill(cmd[1])
             else:
                 raise Exception('Error incorrect number of arguments.')
+        elif cmd[0] == 'kill-app':
+            self.handle_admin_kill_app(proj=cmd[1], app_id=cmd[2])
+        elif cmd[0] == 'kill-worker':
+            self.handle_admin_kill_worker(worker_id=cmd[1])
         elif cmd[0] == 'get-measurements':
             if len(cmd) == 2:
                 self.handle_admin_measurements(cmd[1])
@@ -471,10 +482,27 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
-    def handle_admin_start(self, proj, app_type, instance_id=0):
-        """Handles an admin start request."""
+    def handle_admin_get_apps(self, proj_id, instance_id=0):
+        """Handles an admin get-all request."""
+        # TODO: Will need to filter by instance
+        r = requests.get('http://localhost:8888/api/v1/projects/{}/apps'.format(proj_id))
+        resp = pickle.dumps(json.loads(r.text))
+        resp = 'OBJ\n\n\n'.encode('utf-8') + resp
+        self.send_admin_response(resp, r)
+
+    def handle_admin_get_workers(self, instance_id=0):
+        """Handles an admin get-all request."""
+        # TODO: Will need to filter by instance
+        r = requests.get('http://localhost:8888/api/v1/workers/')
+        resp = pickle.dumps(json.loads(r.text))
+        resp = 'OBJ\n\n\n'.encode('utf-8') + resp
+        self.send_admin_response(resp, r)
+
+    def handle_admin_start_app(self, proj, app_type, instance_id=0):
+        """Handles an admin start-app request."""
         data = {}
-        imsi = 998981234560301
+        # imsi = 998981234560301  # Nexus
+        imsi = 998980123456789  # srsue
         # TODO: Support more app_types
         # TODO: Need to accept IMSI as argument
         # TODO: Need to accept meas_id as argument
@@ -492,7 +520,28 @@ class TCPHandler(socketserver.BaseRequestHandler):
         url = 'http://localhost:8888/api/v1/projects/{}/apps'.format(proj)
         data = json.dumps(data)
         r = requests.post(url, data=data, auth=('root', 'root'))
-        resp = 'TEXT\n\n\nstarted ue service'.encode('utf-8')
+        resp = 'TEXT\n\n\nstarted slice application'.encode('utf-8')
+        self.send_admin_response(resp, r)
+
+    def handle_admin_start_worker(self, worker_type, instance_id=0):
+        """Handles an admin start-worker request."""
+        data = {}
+
+        # TODO: Support more worker_types
+        # TODO: Need to accept instance id as argument
+
+        if worker_type == 'mac-prb-util':
+            data = {"version": "1.0",
+                    "name": 'empower.workers.macprbutilization.macprbutilization',
+                    "params": {
+                        "every": 2000,
+                    }}
+
+        # TODO: Will need to filter by instances
+        url = 'http://localhost:8888/api/v1/workers'
+        data = json.dumps(data)
+        r = requests.post(url, data=data, auth=('root', 'root'))
+        resp = 'TEXT\n\n\nstarted instance worker'.encode('utf-8')
         self.send_admin_response(resp, r)
 
     def handle_admin_kill(self, proj, slice_id=None, instance_id=0):
@@ -505,6 +554,26 @@ class TCPHandler(socketserver.BaseRequestHandler):
         else:
             url = 'http://localhost:8888/api/v1/projects/{}'.format(proj)
             resp = 'TEXT\n\n\nProject has been terminated'.encode('utf-8')
+
+        r = requests.delete(url, auth=('root', 'root'))
+        self.send_admin_response(resp, r)
+
+    def handle_admin_kill_app(self, proj, app_id, instance_id=0):
+        """Handles an admin kill-app request."""
+
+        # TODO: Will need to filter by instances
+        url = 'http://localhost:8888/api/v1/projects/{}/apps/{}'.format(proj, app_id)
+        resp = 'TEXT\n\n\nApplication has been terminated'.encode('utf-8')
+
+        r = requests.delete(url, auth=('root', 'root'))
+        self.send_admin_response(resp, r)
+
+    def handle_admin_kill_worker(self, worker_id, instance_id=0):
+        """Handles an admin kill-worker request."""
+
+        # TODO: Will need to filter by instances
+        url = 'http://localhost:8888/api/v1/workers/{}'.format(worker_id)
+        resp = 'TEXT\n\n\nWorker has been terminated'.encode('utf-8')
 
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
