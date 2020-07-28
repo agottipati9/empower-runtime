@@ -43,11 +43,12 @@ thresholds = {}
 policy_type = ''
 
 # Addresses
+instance_id_to_addr = {}  # Controller instances
 valid_addr = set([])  # Authorized addresses
 emp_control_vbs = {}  # {"": set([])} IP to VBS macs
 emp_control_slices = {}  # {"": set([])} Projects to Slice IDs
 emp_control_projects = {}  # {"": set([])} IP to Projects
-emp_addrs = set([])  # In use addresses
+# emp_addrs = set([])  # In use addresses
 
 
 def parse_metrics(metrics, type):
@@ -292,10 +293,6 @@ def get_slices(addr=None):
     return slices, rbgs
 
 
-def filter_by_instance_id(instance_id):
-    """Read from config."""
-
-
 def demo_policy():
     """Caps controller requests at 20 for an entire session."""
     num_req = emp_valid_met['number_of_requests_total']['value']
@@ -334,7 +331,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 if cmd == 'SLICE':
                     slice, proj_id = parse_empower_slice_msg(msg_)
                     self.handle_slice_creation(slice, proj_id)
-                    emp_addrs.add(self.client_address[0])
+                    # emp_addrs.add(self.client_address[0])
                     print('Slice Information has been updated.')
                 elif cmd == 'DEL_SLICE':
                     slice_id, proj_id = parse_empower_slice_msg(msg_)
@@ -412,7 +409,6 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def handle_admin_control(self, msg_):
         """Handles an admin control message."""
-        # cmd = msg_[1].decode('utf-8')
         cmd = msg_[1].decode('utf-8').split()
 
         if cmd[0] not in valid_admin_cmd:
@@ -429,24 +425,18 @@ class TCPHandler(socketserver.BaseRequestHandler):
         elif cmd[0] == 'get-all':
             self.handle_admin_get_all()
         elif cmd[0] == 'start-app':
-            self.handle_admin_start_app(cmd[1], cmd[2])
+            self.handle_admin_start_app(proj=cmd[1], app_type=cmd[2])
         elif cmd[0] == 'start-worker':
-            self.handle_admin_start_worker(cmd[1])
+            self.handle_admin_start_worker(worker_type=cmd[1])
         elif cmd[0] == 'get-apps':
             self.handle_admin_get_apps(proj_id=cmd[1])
         elif cmd[0] == 'get-workers':
             self.handle_admin_get_workers()
         elif cmd[0] == 'kill':
             if len(cmd) == 3:
-                success = self.handle_admin_kill(cmd[1], cmd[2])
-                #  Update local view
-                if success:
-                    self.handle_slice_deletion(slice_id=cmd[2], proj_id=cmd[1])
+                self.handle_admin_kill(proj=cmd[1], slice_id=cmd[2])
             elif len(cmd) == 2:
-                success = self.handle_admin_kill(cmd[1])
-                #  Update local view
-                if success:
-                    self.handle_slice_deletion(slice_id=None, proj_id=cmd[1])
+                self.handle_admin_kill(proj=cmd[1])
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'kill-app':
@@ -455,7 +445,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
             self.handle_admin_kill_worker(worker_id=cmd[1])
         elif cmd[0] == 'get-measurements':
             if len(cmd) == 2:
-                self.handle_admin_measurements(cmd[1])
+                self.handle_admin_measurements(imsi=cmd[1])
             elif len(cmd) == 1:
                 self.handle_admin_measurements()
             else:
@@ -464,30 +454,21 @@ class TCPHandler(socketserver.BaseRequestHandler):
             self.handle_admin_create_proj()
         elif cmd[0] == 'create-slice':
             if len(cmd) == 3:
-                success = self.handle_admin_create_slice(cmd[1], cmd[2])
-                # Update Local View
-                if success:
-                    self.handle_slice_creation(slice=(cmd[2], '5'), proj_id=cmd[1], admin=True)
+                self.handle_admin_create_slice(proj=cmd[1], slice_id=cmd[2])
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'update-slice':
             if len(cmd) == 5:
-                success = self.handle_admin_update_slice(cmd[1], cmd[2], cmd[3], cmd[4])
-                #  Update local view
-                if success:
-                    self.handle_slice_creation(slice=(cmd[2], cmd[3]), proj_id=cmd[1], admin=True)
+                self.handle_admin_update_slice(proj=cmd[1], slice_id=cmd[2], rgbs=cmd[3], ue_scheduler=cmd[4])
             elif len(cmd) == 4:
-                success = self.handle_admin_update_slice(cmd[1], cmd[2], cmd[3])
-                #  Update local view
-                if success:
-                    self.handle_slice_creation(slice=(cmd[2], cmd[3]), proj_id=cmd[1], admin=True)
+                self.handle_admin_update_slice(proj=cmd[1], slice_id=cmd[2], rgbs=cmd[3])
             elif len(cmd) == 3:
-                self.handle_admin_update_slice(cmd[1], cmd[2])
+                self.handle_admin_update_slice(proj=cmd[1], slice_id=cmd[2])
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'get-slices':
             if len(cmd) == 2:
-                self.handle_admin_get_slices(cmd[1])
+                self.handle_admin_get_slices(proj_id=cmd[1])
             else:
                 raise Exception('Error incorrect number of arguments.')
         else:
@@ -495,34 +476,48 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def handle_admin_get_all(self):
         """Handles an admin get-all request."""
-        # TODO: Will need to loop through all active instances
-        r = requests.get('http://localhost:8888/api/v1/projects/')
-        resp = pickle.dumps(json.loads(r.text))
+        r = None
+        data = {}
+
+        # Loop through all instances
+        for instance in instance_id_to_addr.values():
+            r = requests.get('http://{}:8888/api/v1/projects/'.format(instance))
+            data[instance] = json.loads(r.text)
+
+        # Send Response
+        resp = pickle.dumps(data)
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
     def handle_admin_get_apps(self, proj_id, instance_id=0):
         """Handles an admin get-all request."""
-        # TODO: Will need to filter by instance
-        r = requests.get('http://localhost:8888/api/v1/projects/{}/apps'.format(proj_id))
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/projects/{}/apps'.format(instance, proj_id)
+
+        # Request all running apps
+        r = requests.get(url)
         resp = pickle.dumps(json.loads(r.text))
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
     def handle_admin_get_workers(self, instance_id=0):
         """Handles an admin get-all request."""
-        # TODO: Will need to filter by instance
-        r = requests.get('http://localhost:8888/api/v1/workers/')
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/workers/'.format(instance)
+
+        # Request all running workers
+        r = requests.get(url)
         resp = pickle.dumps(json.loads(r.text))
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
     def handle_admin_start_app(self, proj, app_type, instance_id=0):
         """Handles an admin start-app request."""
-        data = {}
         # imsi = 998981234560301  # Nexus
         imsi = 998980123456789  # srsue
-        # TODO: Support more app_types
+
         # TODO: Need to accept IMSI as argument
         # TODO: Need to accept meas_id as argument
         if app_type == 'ue-measurements':
@@ -534,9 +529,15 @@ class TCPHandler(socketserver.BaseRequestHandler):
                         "meas_id": "1",
                         "interval": "MS480"
                     }}
+        else:
+            # TODO: Support more app_types
+            data = {}
 
-        # TODO: Will need to filter by instances
-        url = 'http://localhost:8888/api/v1/projects/{}/apps'.format(proj)
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/projects/{}/apps'.format(instance, proj)
+
+        # Start slice application
         data = json.dumps(data)
         r = requests.post(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nstarted slice application'.encode('utf-8')
@@ -544,20 +545,22 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def handle_admin_start_worker(self, worker_type, instance_id=0):
         """Handles an admin start-worker request."""
-        data = {}
-
-        # TODO: Support more worker_types
-        # TODO: Need to accept instance id as argument
-
+        # Create data for worker
         if worker_type == 'mac-prb-util':
             data = {"version": "1.0",
                     "name": 'empower.workers.macprbutilization.macprbutilization',
                     "params": {
                         "every": 2000,
                     }}
+        else:
+            # TODO: Support more worker_types
+            data = {}
 
-        # TODO: Will need to filter by instances
-        url = 'http://localhost:8888/api/v1/workers'
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/workers'.format(instance)
+
+        # Start the worker
         data = json.dumps(data)
         r = requests.post(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nstarted instance worker'.encode('utf-8')
@@ -565,51 +568,67 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def handle_admin_kill(self, proj, slice_id=None, instance_id=0):
         """Handles an admin kill project/slice request."""
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
 
-        # TODO: Will need to filter by instances
+        # Format request
         if slice_id is not None:
-            url = 'http://localhost:8888/api/v1/projects/{}/lte_slices/{}'.format(proj, slice_id)
+            url = 'http://{}:8888/api/v1/projects/{}/lte_slices/{}'.format(instance, proj, slice_id)
             resp = 'TEXT\n\n\nSlice has been terminated'.encode('utf-8')
         else:
-            url = 'http://localhost:8888/api/v1/projects/{}'.format(proj)
+            url = 'http://{}:8888/api/v1/projects/{}'.format(instance, proj)
             resp = 'TEXT\n\n\nProject has been terminated'.encode('utf-8')
 
+        # Delete slice or instance
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
-        return 200 <= r.status_code <= 204
+
+        # Update local view on successful response
+        if 200 <= r.status_code <= 204:
+            self.handle_slice_deletion(slice_id=slice_id, proj_id=proj)
 
     def handle_admin_kill_app(self, proj, app_id, instance_id=0):
         """Handles an admin kill-app request."""
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/projects/{}/apps/{}'.format(instance, proj, app_id)
 
-        # TODO: Will need to filter by instances
-        url = 'http://localhost:8888/api/v1/projects/{}/apps/{}'.format(proj, app_id)
+        # Delete an application
         resp = 'TEXT\n\n\nApplication has been terminated'.encode('utf-8')
-
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
 
     def handle_admin_kill_worker(self, worker_id, instance_id=0):
         """Handles an admin kill-worker request."""
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/workers/{}'.format(instance, worker_id)
 
-        # TODO: Will need to filter by instances
-        url = 'http://localhost:8888/api/v1/workers/{}'.format(worker_id)
+        # Delete a worker
         resp = 'TEXT\n\n\nWorker has been terminated'.encode('utf-8')
-
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
 
     def handle_admin_measurements(self, imsi=None, instance_id=0):
         """Handles an admin get-measurements request."""
-        # TODO: Expand to accept specific IMSI
-        # TODO: Will need to filter by instance
+        # Retrieve all UE measurements
         if imsi is None:
-            url = 'http://localhost:8888/api/v1/users'
-        else:
-            url = 'http://localhost:8888/api/v1/users/{}'.format(imsi)
+            r = None
+            data = {}
+            for instance in instance_id_to_addr.values():
+                url = 'http://{}:8888/api/v1/users'.format(instance)
+                r = requests.get(url)
+                data[instance] = json.loads(r.text)
+            resp = 'OBJ\n\n\n'.encode('utf-8') + pickle.dumps(data)
 
-        r = requests.get(url)
-        resp = pickle.dumps(json.loads(r.text))
-        resp = 'OBJ\n\n\n'.encode('utf-8') + resp
+        # Retrieve a specific UE measurement
+        else:
+            # TODO: Expand to accept specific IMSI (need to get working in empower)
+            instance = instance_id_to_addr[instance_id]
+            url = 'http://{}:8888/api/v1/users/{}'.format(instance, imsi)
+            r = requests.get(url)
+            resp = 'OBJ\n\n\n'.encode('utf-8') + pickle.dumps(json.loads(r.text))
+
         self.send_admin_response(resp, r)
 
     def handle_admin_create_proj(self, instance_id=0):
@@ -626,19 +645,20 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 }
                 }
 
-        # TODO: Will need to filter by instance
-        url = 'http://localhost:8888/api/v1/projects/'
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/projects/'.format(instance)
+
+        # Create a project
         data = json.dumps(data)
         r = requests.post(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nProject has been created.'.encode('utf-8')
         self.send_admin_response(resp, r)
-        return 200 <= r.status_code <= 204
 
     def handle_admin_create_slice(self, proj, slice_id=1, instance_id=0):
         """Handles an admin create-slice request."""
         # TODO: Need to accept devices as argument
         # TODO: Need to accept properties as arguments
-        # TODO: Need to accept slice_id as argument
         data = {"version": "1.0",
                 "slice_id": str(slice_id),
                 "properties": {
@@ -648,13 +668,19 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 "devices": {}
                 }
 
-        # TODO: Will need to filter by instances
-        url = 'http://localhost:8888/api/v1/projects/{}/lte_slices/'.format(proj)
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/projects/{}/lte_slices/'.format(instance, proj)
+
+        # Create a slice
         data = json.dumps(data)
         r = requests.post(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nSlice has been created.'.encode('utf-8')
         self.send_admin_response(resp, r)
-        return 200 <= r.status_code <= 204
+
+        # Update local view upon success
+        if 200 <= r.status_code <= 204:
+            self.handle_slice_creation(slice=(slice_id, '5'), proj_id=proj, admin=True)
 
     def handle_admin_update_slice(self, proj, slice_id, rgbs=5, ue_scheduler=0, instance_id=0):
         """Handles an admin update-slice request."""
@@ -670,18 +696,27 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 "devices": {}
                 }
 
-        # TODO: Will need to filter instances
-        url = 'http://localhost:8888/api/v1/projects/{}/lte_slices/{}'.format(proj, slice_id)
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/projects/{}/lte_slices/{}'.format(instance, proj, slice_id)
+
+        # Update slice information
         data = json.dumps(data)
         r = requests.put(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nSlice has been updated.'.encode('utf-8')
         self.send_admin_response(resp, r)
-        return 200 <= r.status_code <= 204
+
+        # Update local view upon success
+        if 200 <= r.status_code <= 204:
+            self.handle_slice_creation(slice=(slice_id, rgbs), proj_id=proj, admin=True)
 
     def handle_admin_get_slices(self, proj_id, instance_id=0):
         """Handles an admin get-slices request."""
-        # TODO: Will need to filter by instances
-        url = 'http://localhost:8888/api/v1/projects/{}/lte_slices'.format(proj_id)
+        # Filter by instance
+        instance = instance_id_to_addr[instance_id]
+        url = 'http://{}:8888/api/v1/projects/{}/lte_slices'.format(instance, proj_id)
+
+        # Request slice information
         r = requests.get(url)
         resp = pickle.dumps(json.loads(r.text))
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
@@ -717,6 +752,10 @@ if __name__ == "__main__":
 
     # Parse Policy Type
     policy_type = config['Policy']['type']
+
+    # Parse Instance Addresses
+    for key in config['InstanceID']:
+        instance_id_to_addr[key] = config['InstanceID'][key]
 
     # Start HTTP server to log info to Prometheus
     start_http_server(7999)
