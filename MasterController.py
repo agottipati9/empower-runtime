@@ -624,7 +624,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         # Update local view if entire project is deleted
         if 200 <= r.status_code <= 204 and slice_id is None:
-            self.handle_slice_deletion(slice_id, proj, instance)
+            self.handle_slice_deletion(slice_id=slice_id, proj_id=proj, ip=instance)
 
     def handle_admin_kill_app(self, instance_id, proj, app_id):
         """Handles an admin kill-app request."""
