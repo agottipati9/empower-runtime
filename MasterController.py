@@ -246,6 +246,7 @@ def net_state_policy(addr, valid_met, ctrl_met, action_type):
     net_traffic
     """
 
+    # TODO: Need to make decision based on project not entire instance i.e. other projects should still be functional
     # TODO: vary policy based on action_type?
     # TODO: Update to filter based on labels for certain metrics
     # TODO: How to query alerts correctly. How to differentiate between instances?
@@ -374,7 +375,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         """Handles control messages."""
         # Malformed Control Received
         if not check_msg_format(control):
-            print('bad format')
+            print('Malformed Packet Received.')
             return 'NO'
 
         try:
@@ -391,6 +392,8 @@ class TCPHandler(socketserver.BaseRequestHandler):
         print('Validating Message...')
         prom_addr_controller = "http://{}:9100/metrics".format(self.client_address[0])
         prom_addr_validator = "http://localhost:7999/metrics"
+        # prom_addr_server = "http://localhost:9090/metrics" # maybe stores alerts
+
         v_metrics = requests.get(prom_addr_validator).content
         c_metrics = requests.get(prom_addr_controller).content
 
@@ -398,7 +401,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         parse_metrics(v_metrics, 'v')
         parse_metrics(c_metrics, 'c')
 
-        # Make Decision (update to make decision on project not just instance...)
+        # Make Decision
         resp = select_policy(self.client_address[0], emp_valid_met, emp_ctrl_met, msg_type, result_type, action_type)
 
         # Update Metrics
