@@ -425,7 +425,16 @@ class TCPHandler(socketserver.BaseRequestHandler):
         elif cmd[0] == 'get-all':
             self.handle_admin_get_all()
         elif cmd[0] == 'start-app':
-            self.handle_admin_start_app(instance_id=cmd[1], proj=cmd[2], app_type=cmd[3])
+            if cmd[3] == 'ue-measurements':
+                if len(cmd) == 6:
+                    self.handle_admin_start_app(instance_id=cmd[1], proj=cmd[2], app_type=cmd[3], imsi=cmd[4],
+                                                meas_id=cmd[5])
+                elif len(cmd) == 5:
+                    self.handle_admin_start_app(instance_id=cmd[1], proj=cmd[2], app_type=cmd[3], imsi=cmd[4])
+                else:
+                    raise Exception('Error incorrect number of arguments.')
+            else:
+                self.handle_admin_start_app(instance_id=cmd[1], proj=cmd[2], app_type=cmd[3])
         elif cmd[0] == 'start-worker':
             self.handle_admin_start_worker(instance_id=cmd[1], worker_type=cmd[2])
         elif cmd[0] == 'get-apps':
@@ -514,20 +523,15 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
-    def handle_admin_start_app(self, instance_id, proj, app_type):
+    def handle_admin_start_app(self, instance_id, proj, app_type, imsi=None, meas_id=1):
         """Handles an admin start-app request."""
-        # imsi = 998981234560301  # Nexus
-        imsi = 998980123456789  # srsue
-
-        # TODO: Need to accept IMSI as argument
-        # TODO: Need to accept meas_id as argument
         if app_type == 'ue-measurements':
             data = {"version": "1.0",
                     "name": 'empower.apps.uemeasurements.uemeasurements',
                     "params": {
                         "amount": "INFINITY",
                         "imsi": str(imsi),
-                        "meas_id": "1",
+                        "meas_id": str(meas_id),
                         "interval": "MS480"
                     }}
         else:
@@ -634,9 +638,6 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def handle_admin_create_proj(self, instance_id):
         """Handles an admin create-project request."""
-        # TODO: Need to accept desc as argument
-        # TODO: Need to accept owner as argument
-        # TODO: Need to accept plmn_id as argument
         data = {"version": "1.0",
                 "desc": "test",
                 "owner": "foo",
@@ -656,17 +657,17 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'TEXT\n\n\nProject has been created.'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-    def handle_admin_create_slice(self, instance_id, proj, slice_id=1):
+    def handle_admin_create_slice(self, instance_id, proj, slice_id=1, rbgs="5", ue_scheduler=0, devices={}):
         """Handles an admin create-slice request."""
         # TODO: Need to accept devices as argument
         # TODO: Need to accept properties as arguments
         data = {"version": "1.0",
                 "slice_id": str(slice_id),
                 "properties": {
-                    "rbgs": "5",
-                    "ue_scheduler": 0
+                    "rbgs": rbgs,
+                    "ue_scheduler": ue_scheduler
                 },
-                "devices": {}
+                "devices": devices
                 }
 
         # Filter by instance
@@ -683,18 +684,16 @@ class TCPHandler(socketserver.BaseRequestHandler):
         if 200 <= r.status_code <= 204:
             self.handle_slice_creation(slice=(slice_id, '5'), proj_id=proj, admin=True)
 
-    def handle_admin_update_slice(self, instance_id, proj, slice_id, rgbs=5, ue_scheduler=0):
+    def handle_admin_update_slice(self, instance_id, proj, slice_id, rgbs=5, ue_scheduler=0, devices={}):
         """Handles an admin update-slice request."""
         # TODO: Need to accept devices as argument
-        # TODO: Need to accept properties as arguments (rgbs, ue_scheduler)
-        # TODO: Need to accept devices as arguments
         data = {"version": "1.0",
                 "slice_id": slice_id,
                 "properties": {
                     "rbgs": rgbs,
                     "ue_scheduler": ue_scheduler
                 },
-                "devices": {}
+                "devices": devices
                 }
 
         # Filter by instance

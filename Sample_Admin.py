@@ -127,11 +127,13 @@ def parse_cmd(cmd):
         return None
     elif (cmd_arr[0] == 'get-workers' or cmd_arr[0] == 'create-project') and len(cmd_arr) != 2:
         return None
-    elif (cmd_arr[0] == 'start-app' or cmd_arr[0] == 'kill-app' or cmd_arr[0] == 'create-slice') and len(cmd_arr) != 4:
+    elif (cmd_arr[0] == 'kill-app' or cmd_arr[0] == 'create-slice') and len(cmd_arr) != 4:
         return None
     elif cmd_arr[0] == 'get-measurements' and (len(cmd_arr) != 1 and len(cmd_arr) != 3):
         return None
-    elif cmd_arr[0] == 'update-slice' and (len(cmd_arr) < 4 or len(cmd_arr) > 6):
+    elif (cmd_arr[0] == 'update-slice') and (len(cmd_arr) < 4 or len(cmd_arr) > 6):
+        return None
+    elif cmd_arr[0] == 'start-app' and (len(cmd_arr) != 5 and len(cmd_arr) != 6):
         return None
     elif cmd_arr[0] == 'kill' and (len(cmd_arr) < 3 or len(cmd_arr) > 4):
         return None
@@ -193,8 +195,8 @@ def help():
     print('kill - Ends a project or removes a slice - "kill instance_id project_id [slice_id]" ')
     print('kill-app - Ends an application - "kill-app instance_id project_id app_id" ')
     print('kill-worker - Ends a worker - "kill instance_id worker_id" ')
-    print('start-app - starts an application - "start-app instance_id project_id app_type"'
-          '\n\t APP TYPES: ue-measurements ')
+    print('start-app - starts an application - "start-app instance_id project_id app_type [app args]"'
+          '\n\t APP TYPES and ARGS: ue-measurements imsi')
     print('start-worker - starts a worker - "start-worker instance_id worker_type"\n\t WORKER TYPES: mac-prb-util ')
     print('get-measurements - Returns all UE measurements - "get-measurements [instance_id] [imsi]" ')
     print('create-project - Creates a project - "create-project instance_id" ')
