@@ -425,50 +425,51 @@ class TCPHandler(socketserver.BaseRequestHandler):
         elif cmd[0] == 'get-all':
             self.handle_admin_get_all()
         elif cmd[0] == 'start-app':
-            self.handle_admin_start_app(proj=cmd[1], app_type=cmd[2])
+            self.handle_admin_start_app(instance_id=cmd[1], proj=cmd[2], app_type=cmd[3])
         elif cmd[0] == 'start-worker':
-            self.handle_admin_start_worker(worker_type=cmd[1])
+            self.handle_admin_start_worker(instance_id=cmd[1], worker_type=cmd[2])
         elif cmd[0] == 'get-apps':
-            self.handle_admin_get_apps(proj_id=cmd[1])
+            self.handle_admin_get_apps(instance_id=cmd[1], proj_id=cmd[2])
         elif cmd[0] == 'get-workers':
-            self.handle_admin_get_workers()
+            self.handle_admin_get_workers(instance_id=cmd[1])
         elif cmd[0] == 'kill':
-            if len(cmd) == 3:
-                self.handle_admin_kill(proj=cmd[1], slice_id=cmd[2])
-            elif len(cmd) == 2:
-                self.handle_admin_kill(proj=cmd[1])
+            if len(cmd) == 4:
+                self.handle_admin_kill(instance_id=cmd[1], proj=cmd[2], slice_id=cmd[3])
+            elif len(cmd) == 3:
+                self.handle_admin_kill(instance_id=cmd[1], proj=cmd[2])
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'kill-app':
-            self.handle_admin_kill_app(proj=cmd[1], app_id=cmd[2])
+            self.handle_admin_kill_app(instance_id=cmd[1], proj=cmd[2], app_id=cmd[3])
         elif cmd[0] == 'kill-worker':
-            self.handle_admin_kill_worker(worker_id=cmd[1])
+            self.handle_admin_kill_worker(instance_id=cmd[1], worker_id=cmd[2])
         elif cmd[0] == 'get-measurements':
-            if len(cmd) == 2:
-                self.handle_admin_measurements(imsi=cmd[1])
+            if len(cmd) == 3:
+                self.handle_admin_measurements(instance_id=cmd[1], imsi=cmd[2])
             elif len(cmd) == 1:
                 self.handle_admin_measurements()
             else:
                 raise Exception('Error.')
         elif cmd[0] == 'create-project':
-            self.handle_admin_create_proj()
+            self.handle_admin_create_proj(instance_id=cmd[1])
         elif cmd[0] == 'create-slice':
-            if len(cmd) == 3:
-                self.handle_admin_create_slice(proj=cmd[1], slice_id=cmd[2])
+            if len(cmd) == 4:
+                self.handle_admin_create_slice(instance_id=cmd[1], proj=cmd[2], slice_id=cmd[3])
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'update-slice':
-            if len(cmd) == 5:
-                self.handle_admin_update_slice(proj=cmd[1], slice_id=cmd[2], rgbs=cmd[3], ue_scheduler=cmd[4])
+            if len(cmd) == 6:
+                self.handle_admin_update_slice(instance_id=cmd[1], proj=cmd[2], slice_id=cmd[3], rgbs=cmd[4],
+                                               ue_scheduler=cmd[5])
+            elif len(cmd) == 5:
+                self.handle_admin_update_slice(instance_id=cmd[1], proj=cmd[2], slice_id=cmd[3], rgbs=cmd[4])
             elif len(cmd) == 4:
-                self.handle_admin_update_slice(proj=cmd[1], slice_id=cmd[2], rgbs=cmd[3])
-            elif len(cmd) == 3:
-                self.handle_admin_update_slice(proj=cmd[1], slice_id=cmd[2])
+                self.handle_admin_update_slice(instance_id=cmd[1], proj=cmd[2], slice_id=cmd[3])
             else:
                 raise Exception('Error incorrect number of arguments.')
         elif cmd[0] == 'get-slices':
-            if len(cmd) == 2:
-                self.handle_admin_get_slices(proj_id=cmd[1])
+            if len(cmd) == 3:
+                self.handle_admin_get_slices(instance_id=cmd[1], proj_id=cmd[2])
             else:
                 raise Exception('Error incorrect number of arguments.')
         else:
@@ -489,7 +490,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
-    def handle_admin_get_apps(self, proj_id, instance_id=0):
+    def handle_admin_get_apps(self, instance_id, proj_id):
         """Handles an admin get-all request."""
         # Filter by instance
         instance = instance_id_to_addr[instance_id]
@@ -501,7 +502,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
-    def handle_admin_get_workers(self, instance_id=0):
+    def handle_admin_get_workers(self, instance_id):
         """Handles an admin get-all request."""
         # Filter by instance
         instance = instance_id_to_addr[instance_id]
@@ -513,7 +514,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'OBJ\n\n\n'.encode('utf-8') + resp
         self.send_admin_response(resp, r)
 
-    def handle_admin_start_app(self, proj, app_type, instance_id=0):
+    def handle_admin_start_app(self, instance_id, proj, app_type):
         """Handles an admin start-app request."""
         # imsi = 998981234560301  # Nexus
         imsi = 998980123456789  # srsue
@@ -543,7 +544,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'TEXT\n\n\nstarted slice application'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-    def handle_admin_start_worker(self, worker_type, instance_id=0):
+    def handle_admin_start_worker(self, instance_id, worker_type):
         """Handles an admin start-worker request."""
         # Create data for worker
         if worker_type == 'mac-prb-util':
@@ -566,7 +567,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'TEXT\n\n\nstarted instance worker'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-    def handle_admin_kill(self, proj, slice_id=None, instance_id=0):
+    def handle_admin_kill(self, instance_id, proj, slice_id=None):
         """Handles an admin kill project/slice request."""
         # Filter by instance
         instance = instance_id_to_addr[instance_id]
@@ -587,7 +588,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         if 200 <= r.status_code <= 204:
             self.handle_slice_deletion(slice_id=slice_id, proj_id=proj)
 
-    def handle_admin_kill_app(self, proj, app_id, instance_id=0):
+    def handle_admin_kill_app(self, instance_id, proj, app_id):
         """Handles an admin kill-app request."""
         # Filter by instance
         instance = instance_id_to_addr[instance_id]
@@ -598,7 +599,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
 
-    def handle_admin_kill_worker(self, worker_id, instance_id=0):
+    def handle_admin_kill_worker(self, instance_id, worker_id):
         """Handles an admin kill-worker request."""
         # Filter by instance
         instance = instance_id_to_addr[instance_id]
@@ -609,7 +610,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
 
-    def handle_admin_measurements(self, imsi=None, instance_id=0):
+    def handle_admin_measurements(self, instance_id=0, imsi=None):
         """Handles an admin get-measurements request."""
         # Retrieve all UE measurements
         if imsi is None:
@@ -631,7 +632,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         self.send_admin_response(resp, r)
 
-    def handle_admin_create_proj(self, instance_id=0):
+    def handle_admin_create_proj(self, instance_id):
         """Handles an admin create-project request."""
         # TODO: Need to accept desc as argument
         # TODO: Need to accept owner as argument
@@ -655,7 +656,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'TEXT\n\n\nProject has been created.'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-    def handle_admin_create_slice(self, proj, slice_id=1, instance_id=0):
+    def handle_admin_create_slice(self, instance_id, proj, slice_id=1):
         """Handles an admin create-slice request."""
         # TODO: Need to accept devices as argument
         # TODO: Need to accept properties as arguments
@@ -682,7 +683,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         if 200 <= r.status_code <= 204:
             self.handle_slice_creation(slice=(slice_id, '5'), proj_id=proj, admin=True)
 
-    def handle_admin_update_slice(self, proj, slice_id, rgbs=5, ue_scheduler=0, instance_id=0):
+    def handle_admin_update_slice(self, instance_id, proj, slice_id, rgbs=5, ue_scheduler=0):
         """Handles an admin update-slice request."""
         # TODO: Need to accept devices as argument
         # TODO: Need to accept properties as arguments (rgbs, ue_scheduler)
@@ -710,7 +711,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         if 200 <= r.status_code <= 204:
             self.handle_slice_creation(slice=(slice_id, rgbs), proj_id=proj, admin=True)
 
-    def handle_admin_get_slices(self, proj_id, instance_id=0):
+    def handle_admin_get_slices(self, instance_id, proj_id):
         """Handles an admin get-slices request."""
         # Filter by instance
         instance = instance_id_to_addr[instance_id]

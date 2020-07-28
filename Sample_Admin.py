@@ -119,20 +119,21 @@ def parse_cmd(cmd):
             and cmd_arr[0] != 'get-workers':
         return None
 
-    # Argument Checks
-    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all' or cmd_arr[0] == 'create-project'
-        or cmd_arr[0] == 'get-workers') and len(cmd_arr) > 1:
+    # Argument Length Checks
+    if (cmd_arr[0] == 'exit' or cmd_arr[0] == 'test' or cmd_arr[0] == 'get-all') and len(cmd_arr) > 1:
         return None
-    elif (cmd_arr[0] == 'get-slices' or cmd_arr[0] == 'start-worker' or cmd_arr[0] == 'kill-worker'
-          or cmd_arr[0] == 'get-apps') and len(cmd_arr) != 2:
+    elif (cmd_arr[0] == 'get-slices' or cmd_arr[0] == 'get-apps' or cmd_arr[0] == 'kill-worker'
+          or cmd_arr[0] == 'start-worker') and len(cmd_arr) != 3:
         return None
-    elif (cmd_arr[0] == 'start-app' or cmd_arr[0] == 'kill-app' or cmd_arr[0] == 'create-slice') and len(cmd_arr) != 3:
+    elif (cmd_arr[0] == 'get-workers' or cmd_arr[0] == 'create-project') and len(cmd_arr) != 2:
         return None
-    elif cmd_arr[0] == 'get-measurements' and (len(cmd_arr) < 1 or len(cmd_arr) > 2):
+    elif (cmd_arr[0] == 'start-app' or cmd_arr[0] == 'kill-app' or cmd_arr[0] == 'create-slice') and len(cmd_arr) != 4:
         return None
-    elif (cmd_arr[0] == 'kill') and (len(cmd_arr) < 2 or len(cmd_arr) > 3):
+    elif cmd_arr[0] == 'get-measurements' and (len(cmd_arr) != 1 and len(cmd_arr) != 3):
         return None
-    elif cmd_arr[0] == 'update-slice' and (len(cmd_arr) < 3 or len(cmd_arr) > 5):
+    elif cmd_arr[0] == 'update-slice' and (len(cmd_arr) < 4 or len(cmd_arr) > 6):
+        return None
+    elif cmd_arr[0] == 'kill' and (len(cmd_arr) < 3 or len(cmd_arr) > 4):
         return None
 
     return cmd_arr
@@ -186,19 +187,20 @@ def help():
     """Prints out all the commands."""
     print('test - Sends a test command to the master controller and returns ok if successful - "test" ')
     print('get-all - Returns all the project information for all instances  - "get-all" ')
-    print('get-slices - Returns all slice information in a project - "get-slices project_id"')
-    print('get-apps - Returns all the applications running on a project  - "get-apps" ')
-    print('get-workers - Returns all the workers running on an instance - "get-workers"')
-    print('kill - Ends a project or removes a slice - "kill project_id [slice_id]" ')
-    print('kill-app - Ends an application - "kill-app project_id app_id" ')
-    print('kill-worker - Ends a worker - "kill worker_id" ')
-    print('start-app - starts an application - "start-app project_id app_type"\n\t APP TYPES: ue-measurements ')
-    print('start-worker - starts a worker - "start-worker worker_type"\n\t WORKER TYPES: mac-prb-util ')
-    print('get-measurements - Returns all UE measurements - "get-measurements [imsi]" ')
-    print('create-project - Creates a project - "create-project" ')
-    print('create-slice - Creates a slice on a project - "create-slice project_id slice_id" ')
-    print('update-slice - Updates a slice on a project - "update-slice project_id slice_id [rgbs] [ue_scheduler]'
-          '\n\t UE_SCHEDULER: 0 - Round Robin')
+    print('get-slices - Returns all slice information in a project - "get-slices instance_id project_id"')
+    print('get-apps - Returns all the applications running on a project  - "get-apps instance_id project_id"')
+    print('get-workers - Returns all the workers running on an instance - "get-workers instance_id"')
+    print('kill - Ends a project or removes a slice - "kill instance_id project_id [slice_id]" ')
+    print('kill-app - Ends an application - "kill-app instance_id project_id app_id" ')
+    print('kill-worker - Ends a worker - "kill instance_id worker_id" ')
+    print('start-app - starts an application - "start-app instance_id project_id app_type"'
+          '\n\t APP TYPES: ue-measurements ')
+    print('start-worker - starts a worker - "start-worker instance_id worker_type"\n\t WORKER TYPES: mac-prb-util ')
+    print('get-measurements - Returns all UE measurements - "get-measurements [instance_id] [imsi]" ')
+    print('create-project - Creates a project - "create-project instance_id" ')
+    print('create-slice - Creates a slice on a project - "create-slice instance_id project_id slice_id" ')
+    print('update-slice - Updates a slice on a project - "update-slice instance_id project_id slice_id [rbgs]'
+          ' [ue_scheduler]''\n\t UE_SCHEDULER: 0 - Round Robin')
 
 
 if __name__ == "__main__":
