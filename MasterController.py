@@ -46,6 +46,8 @@ policy_type = ''
 instance_id_to_addr = {}  # Controller instances
 valid_addr = set([])  # Authorized addresses
 emp_control_vbs = {}  # {"": set([])} IP to VBS macs
+
+# TODO: Convert these to one dict e.g. IP -> Projects -> Slice IDs
 emp_control_slices = {}  # {"": set([])} Projects to Slice IDs
 emp_control_projects = {}  # {"": set([])} IP to Projects
 # emp_addrs = set([])  # In use addresses
@@ -90,29 +92,44 @@ def update_slice_stats(addr, proj_id, slc_id, value, rem=False):
             - If not, update backend view, insert new labels, update metrics 
     """
 
-    # TODO: Update backend upon slice deletion
-    # Gaurd for removing slice info
+    # Deletion
     if rem:
-        # if slc_id is None:
-        return
+        # Update view upon slice deletion
+        if slc_id is None:
+            for slc in emp_control_slices[proj_id]:
+                g_slice_rbgs.labels(addr, proj_id, slc).set(value)
+                emp_local_slice_met.pop((addr, proj_id, slc))
+        else:
+            g_slice_rbgs.labels(addr, proj_id, slc_id).set(value)
+            emp_local_slice_met.pop((addr, proj_id, slc_id))
 
-    # Update local view of slices (ip -> project -> slices)
-    if addr not in emp_control_projects:
-        emp_control_projects[addr] = set([proj_id])
-    if proj_id not in emp_control_slices:
-        emp_control_slices[proj_id] = set([slc_id])
+        # Update local resource view upon slice deletion
+        if slc_id is None:
+            emp_control_projects[addr].remove(proj_id)
+            emp_control_slices.pop(proj_id)
+        else:
+            emp_control_slices[proj_id].remove(slc_id)
+
+    # Addition / Update
     else:
+        # Update keys
+        if addr not in emp_control_projects:
+            emp_control_projects[addr] = set([proj_id])
+        if proj_id not in emp_control_slices:
+            emp_control_slices[proj_id] = set([slc_id])
+
+        # Update local view of slices (ip -> project -> slices)
         emp_control_projects[addr].add(proj_id)
         emp_control_slices[proj_id].add(slc_id)
 
-    # Update local view of slice resources
-    if (addr, slc_id) in emp_local_slice_met.keys():
-        emp_local_slice_met[(addr, proj_id, slc_id)]['rbgs'] = value
-    else:
-        emp_local_slice_met[(addr, proj_id, slc_id)] = {'rbgs': value}
+        # Update local view of slice resources
+        if (addr, proj_id, slc_id) in emp_local_slice_met.keys():
+            emp_local_slice_met[(addr, proj_id, slc_id)]['rbgs'] = value
+        else:
+            emp_local_slice_met[(addr, proj_id, slc_id)] = {'rbgs': value}
 
-    # Update Prometheus
-    g_slice_rbgs.labels(addr, proj_id, slc_id).set(value)
+        # Update Prometheus
+        g_slice_rbgs.labels(addr, proj_id, slc_id).set(value)
 
 
 def update_metrics(ip, res):
@@ -337,7 +354,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 elif cmd == 'DEL_SLICE':
                     slice_id, proj_id = parse_empower_slice_msg(msg_)
                     self.handle_slice_deletion(slice_id[0], proj_id)
-                    print('Slice Information has been updated.')
+                    print('Slice Information has been updated upon deletion.')
                 elif cmd == 'CONTROL':
                     control, resources = parse_empower_ctrl_msg(msg_)
                     resp = self.handle_control_msg(control, resources)
@@ -356,8 +373,13 @@ class TCPHandler(socketserver.BaseRequestHandler):
             print(traceback.format_exc())
             self.send_rejection('Received Malicious Control Packet.')
 
-    def handle_slice_creation(self, slice, proj_id, admin=False):
+    def handle_slice_creation(self, slice, proj_id, admin=False, ip=None):
         """Handles a slice creation/update message."""
+        # Default address
+        if ip is None:
+            ip = self.client_address[0]
+
+        # Parse based on slice vs admin level application
         if admin:
             slice_id = slice[0]
             rbgs = slice[1]
@@ -365,11 +387,15 @@ class TCPHandler(socketserver.BaseRequestHandler):
             slice_id = slice[2]
             rbgs = slice[4]
 
-        update_slice_stats(self.client_address[0], proj_id, slice_id, rbgs)
+        update_slice_stats(ip, proj_id, slice_id, rbgs)
 
-    def handle_slice_deletion(self, slice_id, proj_id):
+    def handle_slice_deletion(self, slice_id, proj_id, ip=None):
         """Handles a slice deletion message."""
-        update_slice_stats(self.client_address[0], proj_id, slice_id, 0, rem=True)
+        # Default address
+        if ip is None:
+            ip = self.client_address[0]
+
+        update_slice_stats(ip, proj_id, slice_id, 0, rem=True)
 
     def handle_control_msg(self, control, resources):
         """Handles control messages."""
@@ -551,14 +577,14 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'TEXT\n\n\nstarted slice application'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-    def handle_admin_start_worker(self, instance_id, worker_type):
+    def handle_admin_start_worker(self, instance_id, worker_type, every=2000):
         """Handles an admin start-worker request."""
         # Create data for worker
         if worker_type == 'mac-prb-util':
             data = {"version": "1.0",
                     "name": 'empower.workers.macprbutilization.macprbutilization',
                     "params": {
-                        "every": 2000,
+                        "every": every,
                     }}
         else:
             # TODO: Support more worker_types
@@ -576,6 +602,11 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def handle_admin_kill(self, instance_id, proj, slice_id=None):
         """Handles an admin kill project/slice request."""
+        # Empower prohibits the deletion of slice 0
+        if slice_id == '0':
+            self.send_admin_response(msg='NO'.encode('utf-8'))
+            return
+
         # Filter by instance
         instance = instance_id_to_addr[instance_id]
 
@@ -591,9 +622,9 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.delete(url, auth=('root', 'root'))
         self.send_admin_response(resp, r)
 
-        # Update local view on successful response
-        if 200 <= r.status_code <= 204:
-            self.handle_slice_deletion(slice_id=slice_id, proj_id=proj)
+        # Update local view if entire project is deleted
+        if 200 <= r.status_code <= 204 and slice_id is None:
+            self.handle_slice_deletion(slice_id, proj, instance)
 
     def handle_admin_kill_app(self, instance_id, proj, app_id):
         """Handles an admin kill-app request."""
@@ -683,12 +714,13 @@ class TCPHandler(socketserver.BaseRequestHandler):
         resp = 'TEXT\n\n\nSlice has been created.'.encode('utf-8')
         self.send_admin_response(resp, r)
 
-        # Update local view upon success
-        if 200 <= r.status_code <= 204:
-            self.handle_slice_creation(slice=(slice_id, '5'), proj_id=proj, admin=True)
-
     def handle_admin_update_slice(self, instance_id, proj, slice_id, rgbs=5, ue_scheduler=0, devices={}):
         """Handles an admin update-slice request."""
+        # Only allow updates to existing slices
+        if proj not in emp_control_slices.keys() or slice_id not in emp_control_slices[proj]:
+            self.send_admin_response(msg='NO'.encode('utf-8'))
+            return
+
         # TODO: Need to accept devices as argument
         data = {"version": "1.0",
                 "slice_id": slice_id,
@@ -708,10 +740,6 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.put(url, data=data, auth=('root', 'root'))
         resp = 'TEXT\n\n\nSlice has been updated.'.encode('utf-8')
         self.send_admin_response(resp, r)
-
-        # Update local view upon success
-        if 200 <= r.status_code <= 204:
-            self.handle_slice_creation(slice=(slice_id, rgbs), proj_id=proj, admin=True)
 
     def handle_admin_get_slices(self, instance_id, proj_id):
         """Handles an admin get-slices request."""
