@@ -230,7 +230,8 @@ class VBSPConnection(RANConnection):
         # Simple Web Server Code for Demo
         received = ""
         if demo:
-            HOST, PORT = "localhost", 9999
+            # HOST, PORT = "localhost", 9999
+            HOST, PORT = "10.10.3.2", 9999
 
             # Open Connection with Validator
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -298,7 +299,8 @@ class VBSPConnection(RANConnection):
 
         msg = "SLICE".encode('utf-8') + b'\n\n\n' + slc.to_str().encode('utf-8') + b'\n\n\n' + \
               project.to_str().encode('utf-8')
-        HOST, PORT = "localhost", 9999
+        # HOST, PORT = "localhost", 9999
+        HOST, PORT = "10.10.3.2", 9999
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Connect to validator
@@ -322,7 +324,8 @@ class VBSPConnection(RANConnection):
         """Send a DEL_SLICE message."""
         msg = "DEL_SLICE".encode('utf-8') + b'\n\n\n' + str(slc_id).encode('utf-8') + \
               b'\n\n\n' + project.to_str().encode('utf-8')
-        HOST, PORT = "localhost", 9999
+        # HOST, PORT = "localhost", 9999
+        HOST, PORT = "10.10.3.2", 9999
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Connect to validator

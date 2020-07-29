@@ -794,7 +794,7 @@ if __name__ == "__main__":
 
     # Create the server for application communication
     print("Running Validator. Listening on port 9999.")
-    HOST, PORT = "localhost", 9999
+    HOST, PORT = "", 9999
     with socketserver.ThreadingTCPServer((HOST, PORT), TCPHandler) as server:
         # interrupt the program with Ctrl-C
         server.serve_forever()
