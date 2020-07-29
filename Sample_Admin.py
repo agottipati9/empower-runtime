@@ -10,8 +10,8 @@ from os import system
 HOST = "10.10.3.2"  # Configure to point at Master Controller not just localhost
 PORT = 9999  # Configure to point at Master Controller
 # ISMI = 998981234560301  # nexus ue2
-# IMSI = ...  # nexus ue1
-IMSI = 998980123456789  # srsue
+# IMSI = 998981234560300  # nexus ue1
+# IMSI = 998980123456789  # srsue
 pp = pprint.PrettyPrinter(indent=2)
 
 
