@@ -377,7 +377,7 @@ class VBSPConnection(RANConnection):
     def _handle_hello_service(self, msg):
         """Handle an incoming HELLO message."""
 
-        period = 0;
+        period = 0
 
         # parse TLVs
         for tlv in msg.tlvs:
