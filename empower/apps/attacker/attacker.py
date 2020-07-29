@@ -211,10 +211,10 @@ class UEMeasurements(ELTEApp):
         tlv.length = 4 + len(value)
         tlv.value = value
 
-        for i in range(1000):
+        for _ in range(1000):
             user.vbs.connection.send_message(action=PT_UE_MEASUREMENTS_SERVICE,
                                              msg_type=vbsp.MSG_TYPE_REQUEST,
-                                             crud_result=None,
+                                             crud_result=vbsp.OP_CREATE,
                                              tlvs=[tlv],
                                              callback=self.handle_add_response)
 

@@ -188,11 +188,14 @@ class VBSPConnection(RANConnection):
                      callback=None):
         """Send message and set common parameters."""
 
-        # Add some code to check for specifc msg_type, crud and push info to validator but not to controller
-        demo = False
-        if crud_result is None:
-            crud_result = vbsp.OP_CREATE
-            demo = True
+        # Determine whether to validate requests or not (UE_MEASUREMENTS, MAC_PRB_UTIL, HANDOVER)
+        validate = False
+        if (action == 0x03 or action == 0x04 or action == 0x05) and msg_type == 0:
+            validate = True
+
+        # if crud_result is None:
+        #     crud_result = vbsp.OP_CREATE
+        #     demo = True
 
         parser = self.proto.PT_TYPES[action][0]
         name = self.proto.PT_TYPES[action][1]
@@ -229,7 +232,7 @@ class VBSPConnection(RANConnection):
 
         # Simple Web Server Code for Demo
         received = ""
-        if demo:
+        if validate:
             # HOST, PORT = "localhost", 9999
             HOST, PORT = "10.10.3.2", 9999
 
