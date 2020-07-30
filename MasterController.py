@@ -51,8 +51,6 @@ emp_control_vbs = {}  # {"": set([])} IP to VBS macs
 # TODO: Convert these to one dict e.g. IP -> Projects -> Slice IDs
 emp_control_slices = {}  # {"": set([])} Projects to Slice IDs
 emp_control_projects = {}  # {"": set([])} IP to Projects
-
-
 # emp_addrs = set([])  # In use addresses
 
 
@@ -419,11 +417,11 @@ class TCPHandler(socketserver.BaseRequestHandler):
         # Hardcoded for proof of concept
         url = 'http://{}:8888/api/v1/projects/{}/apps'.format(instance, 'C32DBE89-8C09-434B-8916-C4340B4215AF')
 
-        # Start slice application
+        # Start slice application on new project
         data = json.dumps(data)
         r = requests.post(url, data=data, auth=('root', 'root'))
 
-        # Kill Current project
+        # Kill compromised project
         proj = 'C32DBE89-8C09-434B-8916-C4340B4215AF'
         url = 'http://{}:8888/api/v1/projects/{}'.format(instance, proj)
         r = requests.delete(url, auth=('root', 'root'))
