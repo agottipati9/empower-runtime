@@ -5,6 +5,7 @@ import socketserver
 import configparser
 import traceback
 import threading
+import time
 from prometheus_client import start_http_server, Summary, Gauge, Counter
 from prometheus_client.parser import text_string_to_metric_families
 
@@ -50,6 +51,8 @@ emp_control_vbs = {}  # {"": set([])} IP to VBS macs
 # TODO: Convert these to one dict e.g. IP -> Projects -> Slice IDs
 emp_control_slices = {}  # {"": set([])} Projects to Slice IDs
 emp_control_projects = {}  # {"": set([])} IP to Projects
+
+
 # emp_addrs = set([])  # In use addresses
 
 
@@ -349,7 +352,6 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 if cmd == 'SLICE':
                     slice, proj_id = parse_empower_slice_msg(msg_)
                     self.handle_slice_creation(slice, proj_id)
-                    # emp_addrs.add(self.client_address[0])
                     print('Slice Information has been updated.')
                 elif cmd == 'DEL_SLICE':
                     slice_id, proj_id = parse_empower_slice_msg(msg_)
@@ -358,10 +360,13 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 elif cmd == 'CONTROL':
                     control, resources = parse_empower_ctrl_msg(msg_)
                     resp = self.handle_control_msg(control, resources)
-                    # emp_addrs.add(self.client_address[0])
                     if resp == 'NO':
-                        print('rejected')
-                        self.send_rejection('Received Malicious Control Packet.')
+                        # print('Received Malicious Control Packet. Time: {}'.format(time.asctime(
+                        #     time.localtime(time.time()))))
+                        # self.trigger_slice_service_migration()
+                        # self.send_rejection('Demo...')
+                        self.send_rejection('Received Malicious Control Packet. Time: {}'.format(time.asctime(
+                            time.localtime(time.time()))))
                     else:
                         self.request.sendall(bytes(resp, "utf-8"))
                         print("Sent Response")
@@ -371,7 +376,67 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         except Exception as e:
             print(traceback.format_exc())
-            self.send_rejection('Received Malicious Control Packet.')
+            self.send_rejection('Received Malicious Control Packet. Time: {}'.format(time.asctime(time.localtime
+                                                                                                  (time.time()))))
+
+    def trigger_slice_service_migration(self):
+        """Triggers a slice service migration."""
+        print('Triggering slice service migration... Time: {}'.format(time.asctime(time.localtime(time.time()))))
+
+        # New Project Data
+        data = {"version": "1.0",
+                "desc": "test",
+                "owner": "foo",
+                "wifi_props": {},
+                "lte_props": {
+                    "plmnid": "99898"
+                }
+                }
+
+        # Filter by instance (hardcoded for proof of concept)
+        instance = instance_id_to_addr[0]
+        url = 'http://{}:8888/api/v1/projects/C32DBE89-8C09-434B-8916-C4340B4215AF'.format(instance)
+
+        # Create new project
+        data = json.dumps(data)
+        r = requests.post(url, data=data, auth=('root', 'root'))
+
+        # Failed to create new project
+        if r.status_code < 200 or r.status_code > 204:
+            print('Error: Failed to create new slice.')
+            return
+
+        # Start app on new project (hardcoded for proof of concept)
+        data = {"version": "1.0",
+                "name": 'empower.apps.uemeasurements.uemeasurements',
+                "params": {
+                    "amount": "INFINITY",
+                    "imsi": '998981234560301',
+                    "meas_id": '1',
+                    "interval": "MS480"
+                }}
+
+        # Hardcoded for proof of concept
+        url = 'http://{}:8888/api/v1/projects/{}/apps'.format(instance, 'C32DBE89-8C09-434B-8916-C4340B4215AF')
+
+        # Start slice application
+        data = json.dumps(data)
+        r = requests.post(url, data=data, auth=('root', 'root'))
+
+        # Kill Current project
+        proj = 'C32DBE89-8C09-434B-8916-C4340B4215AF'
+        url = 'http://{}:8888/api/v1/projects/{}'.format(instance, proj)
+        r = requests.delete(url, auth=('root', 'root'))
+
+        # # Update local view if entire project is deleted
+        # if 200 <= r.status_code <= 204 and slice_id is None:
+        #     self.handle_slice_deletion(slice_id=slice_id, proj_id=proj, ip=instance)
+
+        # Failed to kill compromised project
+        if r.status_code < 200 or r.status_code > 204:
+            print('Error: Failed to kill compromised slice.')
+        else:
+            print('Service has been migrated... Time: {}'.format(time.asctime(time.localtime(time.time()))))
 
     def handle_slice_creation(self, slice, proj_id, admin=False, ip=None):
         """Handles a slice creation/update message."""
@@ -409,7 +474,10 @@ class TCPHandler(socketserver.BaseRequestHandler):
             msg_type = emp_msg_type[str(control.flags.msg_type)]
             result_type = emp_crud_result[str(control.tsrc.crud_result)]
             action_type = emp_action_type[str(control.tsrc.action)]
-            print('Received Control Message: Type:{} Result:{} Action:{}'.format(msg_type, result_type, action_type))
+            print('Received Control Message: Type:{} Result:{} Action:{} Time: {}'.format(msg_type, result_type,
+                                                                                          action_type,
+                                                                                          time.asctime(time.localtime
+                                                                                                       (time.time()))))
         except Exception as e:
             print(traceback.format_exc())
             return 'NO'
@@ -444,7 +512,8 @@ class TCPHandler(socketserver.BaseRequestHandler):
             print('Received Unknown Command from Admin application.')
             self.send_admin_response(bytes('NO', 'utf-8'))
         else:
-            print('Received {} Command from Admin application.'.format(cmd[0]))
+            print('Received {} Command from Admin application. Time: {}'.format(cmd[0], time.asctime(time.localtime(
+                time.time()))))
             self.execute_admin_control(cmd)
 
     def execute_admin_control(self, cmd):
