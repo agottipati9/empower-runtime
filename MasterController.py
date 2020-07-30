@@ -368,17 +368,19 @@ class TCPHandler(socketserver.BaseRequestHandler):
                     control, resources = parse_empower_ctrl_msg(msg_)
                     resp = self.handle_control_msg(control, resources)
                     if resp == 'NO':
-                        global started_migration
-
-                        if not started_migration:
-                            started_migration = True
-                            print('Received Malicious Control Packet. Time: {}'.format(time.asctime(
-                                time.localtime(time.time()))))
-                            self.send_rejection('Demo...')
-                            self.trigger_slice_service_migration()
-                        else:
-                            self.send_rejection('Received Malicious Control Packet. Time: {}'.format(time.asctime(
-                                time.localtime(time.time()))))
+                        self.send_rejection('Received Malicious Control Packet. Time: {}'.format(time.asctime(
+                                 time.localtime(time.time()))))
+                        # global started_migration
+                        #
+                        # if not started_migration:
+                        #     started_migration = True
+                        #     print('Received Malicious Control Packet. Time: {}'.format(time.asctime(
+                        #         time.localtime(time.time()))))
+                        #     self.send_rejection('Demo...')
+                        #     self.trigger_slice_service_migration()
+                        # else:
+                        #     self.send_rejection('Received Malicious Control Packet. Time: {}'.format(time.asctime(
+                        #         time.localtime(time.time()))))
                     else:
                         self.request.sendall(bytes(resp, "utf-8"))
                         print("Sent Response")
@@ -437,7 +439,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.post(url, data=data, auth=('root', 'root'))
 
         # Kill compromised project
-        proj = 'CD82B1FF-D95D-41DB-B4B8-1E575F21DF16'
+        proj = 'BF5EA235-4D38-43B6-AFCA-C4094BAEC9E1'
         url = 'http://{}:8888/api/v1/projects/{}'.format(instance, proj)
         r = requests.delete(url, auth=('root', 'root'))
 
