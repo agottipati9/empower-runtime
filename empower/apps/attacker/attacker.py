@@ -211,12 +211,15 @@ class UEMeasurements(ELTEApp):
         tlv.length = 4 + len(value)
         tlv.value = value
 
-        for _ in range(1000):
+        for i in range(1000):
             user.vbs.connection.send_message(action=PT_UE_MEASUREMENTS_SERVICE,
                                              msg_type=vbsp.MSG_TYPE_REQUEST,
                                              crud_result=vbsp.OP_CREATE,
                                              tlvs=[tlv],
                                              callback=self.handle_add_response)
+            # Add delay in between requests
+            if i % 10 == 0:
+                time.sleep(0.3)
 
     def handle_ue_leave(self, user):
         """Called when a UE leaves the network."""
