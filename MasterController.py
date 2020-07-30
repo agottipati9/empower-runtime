@@ -6,6 +6,7 @@ import configparser
 import traceback
 import threading
 import time
+from datetime import datetime
 from prometheus_client import start_http_server, Summary, Gauge, Counter
 from prometheus_client.parser import text_string_to_metric_families
 
@@ -52,6 +53,9 @@ emp_control_vbs = {}  # {"": set([])} IP to VBS macs
 emp_control_slices = {}  # {"": set([])} Projects to Slice IDs
 emp_control_projects = {}  # {"": set([])} IP to Projects
 # emp_addrs = set([])  # In use addresses
+
+# For demo purposes
+started_migration = False
 
 
 def parse_metrics(metrics, type):
@@ -180,6 +184,11 @@ def update_metrics(ip, res):
         # Can get physical cell id with res['mac_prb_utilization']['pci']
     except Exception as e:
         print('No network state updates.')
+
+
+def increment_requests(ip):
+    """FOR PROOF OF CONCEPT: Represents a request from the migrated slice."""
+    c_num_req.labels(ip).inc()
 
 
 def calculate_rbgs(prbs):
@@ -359,12 +368,17 @@ class TCPHandler(socketserver.BaseRequestHandler):
                     control, resources = parse_empower_ctrl_msg(msg_)
                     resp = self.handle_control_msg(control, resources)
                     if resp == 'NO':
-                        # print('Received Malicious Control Packet. Time: {}'.format(time.asctime(
-                        #     time.localtime(time.time()))))
-                        # self.trigger_slice_service_migration()
-                        # self.send_rejection('Demo...')
-                        self.send_rejection('Received Malicious Control Packet. Time: {}'.format(time.asctime(
-                            time.localtime(time.time()))))
+                        global started_migration
+
+                        if not started_migration:
+                            started_migration = True
+                            print('Received Malicious Control Packet. Time: {}'.format(time.asctime(
+                                time.localtime(time.time()))))
+                            self.send_rejection('Demo...')
+                            self.trigger_slice_service_migration()
+                        else:
+                            self.send_rejection('Received Malicious Control Packet. Time: {}'.format(time.asctime(
+                                time.localtime(time.time()))))
                     else:
                         self.request.sendall(bytes(resp, "utf-8"))
                         print("Sent Response")
@@ -379,7 +393,8 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
     def trigger_slice_service_migration(self):
         """Triggers a slice service migration."""
-        print('Triggering slice service migration... Time: {}'.format(time.asctime(time.localtime(time.time()))))
+        print('Triggering slice service migration... Time: {}'.format(
+            datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]))
 
         # New Project Data
         data = {"version": "1.0",
@@ -392,7 +407,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 }
 
         # Filter by instance (hardcoded for proof of concept)
-        instance = instance_id_to_addr[0]
+        instance = instance_id_to_addr['0']
         url = 'http://{}:8888/api/v1/projects/C32DBE89-8C09-434B-8916-C4340B4215AF'.format(instance)
 
         # Create new project
@@ -409,7 +424,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
                 "name": 'empower.apps.uemeasurements.uemeasurements',
                 "params": {
                     "amount": "INFINITY",
-                    "imsi": '998981234560301',
+                    "imsi": '998980123456789',
                     "meas_id": '1',
                     "interval": "MS480"
                 }}
@@ -422,7 +437,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
         r = requests.post(url, data=data, auth=('root', 'root'))
 
         # Kill compromised project
-        proj = 'C32DBE89-8C09-434B-8916-C4340B4215AF'
+        proj = 'CD82B1FF-D95D-41DB-B4B8-1E575F21DF16'
         url = 'http://{}:8888/api/v1/projects/{}'.format(instance, proj)
         r = requests.delete(url, auth=('root', 'root'))
 
@@ -434,7 +449,11 @@ class TCPHandler(socketserver.BaseRequestHandler):
         if r.status_code < 200 or r.status_code > 204:
             print('Error: Failed to kill compromised slice.')
         else:
-            print('Service has been migrated... Time: {}'.format(time.asctime(time.localtime(time.time()))))
+            global policy_type
+            print('SUCCESS Service has been migrated... Time: {}'.format(
+                datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]))
+            # policy_type = 'None'
+            increment_requests(instance)
 
     def handle_slice_creation(self, slice, proj_id, admin=False, ip=None):
         """Handles a slice creation/update message."""
