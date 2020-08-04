@@ -400,7 +400,7 @@ class TCPHandler(socketserver.BaseRequestHandler):
 
         # New Project Data
         data = {"version": "1.0",
-                "desc": "test",
+                "desc": "clean",
                 "owner": "foo",
                 "wifi_props": {},
                 "lte_props": {
