@@ -805,9 +805,9 @@ class TCPHandler(socketserver.BaseRequestHandler):
     def handle_admin_update_slice(self, instance_id, proj, slice_id, rgbs=5, ue_scheduler=0, devices={}):
         """Handles an admin update-slice request."""
         # Only allow updates to existing slices
-        if proj not in emp_control_slices.keys() or slice_id not in emp_control_slices[proj]:
-            self.send_admin_response(msg='NO'.encode('utf-8'))
-            return
+        # if proj not in emp_control_slices.keys() or slice_id not in emp_control_slices[proj]:
+        #     self.send_admin_response(msg='NO'.encode('utf-8'))
+        #     return
 
         # TODO: Need to accept devices as argument
         data = {"version": "1.0",
